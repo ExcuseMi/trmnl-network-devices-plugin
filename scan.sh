@@ -7,8 +7,8 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# Vendor DB URL
-VENDOR_DB_URL="https://raw.githubusercontent.com/trezor/trezor-firmware/master/common/vendor_db.txt"
+# Vendor DB URL - Using Wireshark's OUI database
+VENDOR_DB_URL="https://www.wireshark.org/download/automated/data/manuf"
 VENDOR_DB="/tmp/device-vendors.txt"
 
 log() {
@@ -26,8 +26,9 @@ fi
 lookup_vendor() {
     local mac="$1"
     [ -z "$mac" ] && echo "Unknown" && return
-    local oui=$(echo "$mac" | awk -F: '{print toupper($1$2$3)}')
-    grep -i "$oui" "$VENDOR_DB" | awk -F'\t' '{print $2}' | head -n1 || echo "Unknown"
+    local oui=$(echo "$mac" | awk -F: '{print toupper($1":"$2":"$3)}')
+    # Wireshark format: OUI\tShortName\tLongName
+    grep -i "^${oui}" "$VENDOR_DB" | awk -F'\t' '{if ($3) print $3; else if ($2) print $2; else print $1}' | head -n1 || echo "Unknown"
 }
 
 resolve_hostname() {
