@@ -19,6 +19,7 @@ services:
       PLUGIN_UUID: ${PLUGIN_UUID}
       INTERVAL: ${INTERVAL}
       BYTE_LIMIT: ${BYTE_LIMIT}
+      NETWORK: ${NETWORK}
 
     volumes:
       - /proc/net/arp:/host/arp:ro
