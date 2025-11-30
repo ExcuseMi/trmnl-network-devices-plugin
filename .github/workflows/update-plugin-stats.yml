@@ -1,0 +1,42 @@
+name: Update Plugin Stats in README
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/update-plugin-stats.yml'
+      - 'scripts/update_plugin_stats.py'
+      - 'plugins.env'
+
+# Grant explicit permissions
+permissions:
+  contents: write
+
+jobs:
+  update-stats:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Update README with plugin stats
+        run: python scripts/update_plugin_stats.py
+
+      - name: Commit and push changes
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          commit_message: "📊 Update plugin statistics in README"
+          commit_author: "GitHub Actions <actions@github.com>"

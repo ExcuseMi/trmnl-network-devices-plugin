@@ -22,16 +22,6 @@ docker-compose up -d
 
 That's it. The scanner will auto-detect your network and start sending data to TRMNL.
 
-## Configuration
-
-### Plugin Settings (in TRMNL)
-
-Copy `PLUGIN_SETTINGS.yaml` into your TRMNL plugin's Custom Fields.
-
-### Display Template (in TRMNL)
-
-Copy `TRMNL_TEMPLATE.liquid` into your TRMNL plugin's Markup Editor.
-
 ### Scanner Settings (.env file)
 
 ```bash
@@ -39,15 +29,6 @@ PLUGIN_UUID=your_plugin_uuid_here
 INTERVAL=15        # Scan every 15 minutes
 BYTE_LIMIT=2000    # 2000 for free, 5000 for TRMNL+
 ```
-
-## Features
-
-- **Custom Device Names**: Identify unknown devices by MAC/IP
-- **Custom Icons**: Map devices to Font Awesome icons
-- **Hide Devices**: Filter out unwanted devices
-- **Auto-detection**: Automatically finds your network
-
-See `PLUGIN_SETTINGS.yaml` for configuration options.
 
 ## Troubleshooting
 
@@ -69,3 +50,6 @@ docker-compose up -d
 ## License
 
 MIT
+
+<!-- PLUGIN_STATS_START -->
+<!-- PLUGIN_STATS_END -->
