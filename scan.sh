@@ -224,6 +224,11 @@ send_to_trmnl() {
 
         IDENTIFIER="${MAC:-$IP}"
 
+        # Don't send hostname if it's same as IP (save bytes)
+        if [ "$HOSTNAME" = "$IP" ]; then
+            HOSTNAME=""
+        fi
+
         # Send actual timestamp instead of 1
         DEVICE_STR="$IP|$HOSTNAME|$MAC|$VENDOR|$CURRENT_TIMESTAMP"
         DEVICES_ARRAY=$(echo "$DEVICES_ARRAY" | jq --arg d "$DEVICE_STR" '. += [$d]')
@@ -251,6 +256,11 @@ send_to_trmnl() {
                 P_HN=$(echo "$entry" | jq -r '.value.hostname')
                 P_MAC=$(echo "$entry" | jq -r '.value.mac')
                 P_VEND=$(echo "$entry" | jq -r '.value.vendor')
+
+                # Don't send hostname if it's same as IP (save bytes)
+                if [ "$P_HN" = "$P_IP" ]; then
+                    P_HN=""
+                fi
 
                 # Send the old timestamp (when it was last seen)
                 DEVICE_STR="$P_IP|$P_HN|$P_MAC|$P_VEND|$TS"
@@ -409,4 +419,5 @@ while true; do
     SLEEP_SECONDS=$((INTERVAL * 60))
     log "${BLUE}Sleeping for $INTERVAL minutes...${NC}"
     sleep $SLEEP_SECONDS
+done
 done
