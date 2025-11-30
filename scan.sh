@@ -357,14 +357,16 @@ send_to_trmnl() {
         IDENTIFIER="${MAC:-$IP}"
         [ "$HOSTNAME" = "$IP" ] && HOSTNAME=""
 
-        DEVICE_STR="$IP|$HOSTNAME|$MAC|$VENDOR|$TYPE|$CURRENT_TIMESTAMP|online"
+        STATUS=1  # online = 1
+
+        DEVICE_STR="$IP|$HOSTNAME|$MAC|$VENDOR|$TYPE|$CURRENT_TIMESTAMP|$STATUS"
         DEVICES_ARRAY=$(echo "$DEVICES_ARRAY" | jq --arg d "$DEVICE_STR" '. += [$d]')
 
         CURRENT_MAP=$(echo "$CURRENT_MAP" | jq --arg id "$IDENTIFIER" \
             --arg ts "$CURRENT_TIMESTAMP" \
             --arg ip "$IP" --arg hostname "$HOSTNAME" \
             --arg mac "$MAC" --arg vendor "$VENDOR" --arg type "$TYPE" \
-            --arg status "online" \
+            --argjson status "$STATUS" \
             '. + {($id): {last_seen: $ts, ip: $ip, hostname: $hostname, mac: $mac, vendor: $vendor, type: $type, status: $status}}')
     done < <(echo "$DEVICES" | jq -c '.[]')
 
@@ -399,14 +401,15 @@ send_to_trmnl() {
                 continue
             fi
 
-            DEVICE_STR="$IP|$HOSTNAME|$MAC|$VENDOR|$TYPE|$TS|offline"
+            STATUS=0  # offline = 0
+            DEVICE_STR="$IP|$HOSTNAME|$MAC|$VENDOR|$TYPE|$TS|$STATUS"
             DEVICES_ARRAY=$(echo "$DEVICES_ARRAY" | jq --arg d "$DEVICE_STR" '. += [$d]')
 
             CURRENT_MAP=$(echo "$CURRENT_MAP" | jq --arg id "$ID" \
                 --arg ts "$TS" \
                 --arg ip "$IP" --arg hostname "$HOSTNAME" \
                 --arg mac "$MAC" --arg vendor "$VENDOR" --arg type "$TYPE" \
-                --arg status "offline" \
+                --argjson status "$STATUS" \
                 '. + {($id): {last_seen: $ts, ip: $ip, hostname: $hostname, mac: $mac, vendor: $vendor, type: $type, status: $status}}')
         done
     fi
@@ -423,6 +426,7 @@ send_to_trmnl() {
 
     PAYLOAD_SIZE=${#PAYLOAD}
     DEVICE_COUNT=$(echo "$DEVICES_ARRAY" | jq 'length')
+    log "${BLUE}Payload size: ${PAYLOAD_SIZE} bytes (${DEVICE_COUNT} devices)${NC}"
 
     # ----------------------------
     # Truncate if over byte limit
@@ -430,8 +434,8 @@ send_to_trmnl() {
     if [ "$PAYLOAD_SIZE" -gt "$BYTE_LIMIT" ]; then
         log "${RED}WARNING: Payload ${PAYLOAD_SIZE} exceeds ${BYTE_LIMIT} bytes, truncating...${NC}"
 
-        ONLINE_ARRAY=$(echo "$DEVICES_ARRAY" | jq '[.[] | select(endswith("|online"))]')
-        OFFLINE_ARRAY=$(echo "$DEVICES_ARRAY" | jq '[.[] | select(endswith("|offline"))]')
+        ONLINE_ARRAY=$(echo "$DEVICES_ARRAY" | jq '[.[] | select(endswith("|1"))]')
+        OFFLINE_ARRAY=$(echo "$DEVICES_ARRAY" | jq '[.[] | select(endswith("|0"))]')
 
         TRUNCATED_ARRAY='[]'
 
@@ -456,7 +460,7 @@ send_to_trmnl() {
 
         PAYLOAD_SIZE=${#PAYLOAD}
         TRUNCATED_COUNT=$(echo "$TRUNCATED_ARRAY" | jq 'length')
-        log "${YELLOW}Truncated payload size: ${PAYLOAD_SIZE} bytes (${TRUNCATED_COUNT} devices)${NC}"
+        log "${YELLOW}Truncated payload size: ${PAYLOAD_SIZE} bytes (${TRUNCATED_COUNT} of ${DEVICE_COUNT} devices)${NC}"
     fi
 
     # ----------------------------
