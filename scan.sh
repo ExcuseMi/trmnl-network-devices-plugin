@@ -335,151 +335,87 @@ perform_scan() {
 # Send data to TRMNL
 # ----------------------------
 send_to_trmnl() {
-    local DEVICES="$1"
-    local PLUGIN_UUID="$2"
+    echo "[INFO] Preparing payload for TRMNL..."
 
-    BYTE_LIMIT=${BYTE_LIMIT:-2000}
-    CURRENT_TIMESTAMP=$(date +%s)
+    TS=$(date +%s)
+    CURRENT_MAP=$(cat "$STATE_FILE")
+    DEVICES_ARRAY=$(echo "[]" | jq '.')
 
-    CURRENT_MAP='{}'
-    DEVICES_ARRAY='[]'
+    echo "[INFO] Adding online devices from ARP scan..."
+    echo "$DISCOVERED_DEVICES" | while IFS="|" read -r IP HOSTNAME MAC VENDOR TYPE; do
+        [ -z "$IP" ] && continue
 
-    # ----------------------------
-    # Add current online devices
-    # ----------------------------
-    while IFS= read -r device; do
-        IP=$(echo "$device" | jq -r '.ip')
-        HOSTNAME=$(echo "$device" | jq -r '.hostname')
-        MAC=$(echo "$device" | jq -r '.mac')
-        VENDOR=$(echo "$device" | jq -r '.vendor')
-        TYPE=$(echo "$device" | jq -r '.type // "Network Device"')
+        STATUS=1
 
-        IDENTIFIER="${MAC:-$IP}"
-        [ "$HOSTNAME" = "$IP" ] && HOSTNAME=""
+        DEVICE_STR="$IP|$HOSTNAME|$MAC|$VENDOR|$TYPE|$TS|$STATUS"
 
-        STATUS=1  # online = 1
-
-        DEVICE_STR="$IP|$HOSTNAME|$MAC|$VENDOR|$TYPE|$CURRENT_TIMESTAMP|$STATUS"
         DEVICES_ARRAY=$(echo "$DEVICES_ARRAY" | jq --arg d "$DEVICE_STR" '. += [$d]')
 
-        CURRENT_MAP=$(echo "$CURRENT_MAP" | jq --arg id "$IDENTIFIER" \
-            --arg ts "$CURRENT_TIMESTAMP" \
-            --arg ip "$IP" --arg hostname "$HOSTNAME" \
-            --arg mac "$MAC" --arg vendor "$VENDOR" --arg type "$TYPE" \
-            --argjson status "$STATUS" \
-            '. + {($id): {last_seen: $ts, ip: $ip, hostname: $hostname, mac: $mac, vendor: $vendor, type: $type, status: $status}}')
-    done < <(echo "$DEVICES" | jq -c '.[]')
+        ID="$MAC"
+        CURRENT_MAP=$(echo "$CURRENT_MAP" | jq --arg id "$ID" \
+            --arg ts "$TS" \
+            --arg ip "$IP" \
+            --arg hn "$HOSTNAME" \
+            --arg mac "$MAC" \
+            --arg vendor "$VENDOR" \
+            --arg type "$TYPE" \
+            '. + {($id): {last_seen:$ts, ip:$ip, hostname:$hn, mac:$mac, vendor:$vendor, type:$type}}')
+    done
 
-    # ----------------------------
-    # Merge offline devices from previous state
-    # ----------------------------
-    if [ -f "$STATE_FILE" ]; then
-        PREV=$(cat "$STATE_FILE")
-        CUTOFF=$((CURRENT_TIMESTAMP - 86400)) # 24h retention
+    echo "[INFO] Checking for offline devices..."
+    echo "$CURRENT_MAP" | jq -r 'keys[]' | while read -r ID; do
+        LAST_SEEN=$(echo "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].last_seen')
+        [ -z "$LAST_SEEN" ] && continue
 
-        for row in $(echo "$PREV" | jq -r 'to_entries | .[] | @base64'); do
-            _jq() { echo "$row" | base64 --decode | jq -r "$1"; }
+        NOW=$TS
+        DIFF=$((NOW - LAST_SEEN))
 
-            ID=$(_jq '.key')
-            TS=$(_jq '.value.last_seen')
-            IP=$(_jq '.value.ip')
-            HOSTNAME=$(_jq '.value.hostname')
-            MAC=$(_jq '.value.mac')
-            VENDOR=$(_jq '.value.vendor')
-            TYPE=$(_jq '.value.type // "Network Device"')
+        if [ "$DIFF" -gt "$SCAN_INTERVAL" ]; then
+            IP=$(echo "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].ip')
+            MAC=$(echo "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].mac')
 
-            [ "$HOSTNAME" = "$IP" ] && HOSTNAME=""
+            [ -z "$IP" ] && [ -z "$MAC" ] && continue
 
-            # Skip if already in current scan or missing identifier
-            IN_CURRENT=$(echo "$CURRENT_MAP" | jq --arg id "$ID" 'has($id)')
-            if [ "$IN_CURRENT" = "true" ] || ([ -z "$IP" ] && [ -z "$MAC" ]); then
-                continue
-            fi
+            HOSTNAME=$(echo "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].hostname')
+            VENDOR=$(echo "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].vendor')
+            TYPE=$(echo "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].type')
 
-            # Skip if last seen outside cutoff
-            if [ "$TS" -le "$CUTOFF" ]; then
-                continue
-            fi
+            STATUS=0
 
-            STATUS=0  # offline = 0
-            DEVICE_STR="$IP|$HOSTNAME|$MAC|$VENDOR|$TYPE|$TS|$STATUS"
+            DEVICE_STR="$IP|$HOSTNAME|$MAC|$VENDOR|$TYPE|$LAST_SEEN|$STATUS"
+
             DEVICES_ARRAY=$(echo "$DEVICES_ARRAY" | jq --arg d "$DEVICE_STR" '. += [$d]')
+        fi
+    done
 
-            CURRENT_MAP=$(echo "$CURRENT_MAP" | jq --arg id "$ID" \
-                --arg ts "$TS" \
-                --arg ip "$IP" --arg hostname "$HOSTNAME" \
-                --arg mac "$MAC" --arg vendor "$VENDOR" --arg type "$TYPE" \
-                --argjson status "$STATUS" \
-                '. + {($id): {last_seen: $ts, ip: $ip, hostname: $hostname, mac: $mac, vendor: $vendor, type: $type, status: $status}}')
-        done
-    fi
-
-    # Save updated state
-    echo "$CURRENT_MAP" > "$STATE_FILE"
-
-    TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    echo "[INFO] Final device count: $(echo "$DEVICES_ARRAY" | jq 'length')"
 
     PAYLOAD=$(jq -n \
-        --argjson devices "$DEVICES_ARRAY" \
-        --arg timestamp "$TIMESTAMP" \
-        '{ merge_variables: { devices_list: $devices, last_scan: $timestamp }}')
+        --arg gateway_uuid "$GATEWAY_UUID" \
+        --arg scan_interval "$SCAN_INTERVAL" \
+        --arg ts "$TS" \
+        --arg devices "$DEVICES_ARRAY" \
+        '{
+            gateway_uuid: $gateway_uuid,
+            scan_interval: ($scan_interval | tonumber),
+            timestamp: ($ts | tonumber),
+            devices: ($devices | fromjson)
+        }')
 
-    PAYLOAD_SIZE=${#PAYLOAD}
-    DEVICE_COUNT=$(echo "$DEVICES_ARRAY" | jq 'length')
-    log "${BLUE}Payload size: ${PAYLOAD_SIZE} bytes (${DEVICE_COUNT} devices)${NC}"
+    RAW_BYTES=$(printf "%s" "$PAYLOAD" | wc -c)
 
-    # ----------------------------
-    # Truncate if over byte limit
-    # ----------------------------
-    if [ "$PAYLOAD_SIZE" -gt "$BYTE_LIMIT" ]; then
-        log "${RED}WARNING: Payload ${PAYLOAD_SIZE} exceeds ${BYTE_LIMIT} bytes, truncating...${NC}"
+    echo "[INFO] Payload raw size: $RAW_BYTES bytes"
+    echo "[INFO] Sending raw JSON payload to TRMNL..."
 
-        ONLINE_ARRAY=$(echo "$DEVICES_ARRAY" | jq '[.[] | select(endswith("|1"))]')
-        OFFLINE_ARRAY=$(echo "$DEVICES_ARRAY" | jq '[.[] | select(endswith("|0"))]')
-
-        TRUNCATED_ARRAY='[]'
-
-        # Add online first
-        for d in $(echo "$ONLINE_ARRAY" | jq -r '.[]'); do
-            TEST=$(echo "$TRUNCATED_ARRAY" | jq --arg d "$d" '. += [$d]')
-            TEST_PAYLOAD=$(jq -n --argjson devices "$TEST" --arg timestamp "$TIMESTAMP" \
-                '{ merge_variables: { devices_list: $devices, last_scan: $timestamp }}')
-            (( ${#TEST_PAYLOAD} < BYTE_LIMIT-100 )) && TRUNCATED_ARRAY="$TEST" || break
-        done
-
-        # Add offline if space remains
-        for d in $(echo "$OFFLINE_ARRAY" | jq -r '.[]'); do
-            TEST=$(echo "$TRUNCATED_ARRAY" | jq --arg d "$d" '. += [$d]')
-            TEST_PAYLOAD=$(jq -n --argjson devices "$TEST" --arg timestamp "$TIMESTAMP" \
-                '{ merge_variables: { devices_list: $devices, last_scan: $timestamp }}')
-            (( ${#TEST_PAYLOAD} < BYTE_LIMIT-100 )) && TRUNCATED_ARRAY="$TEST" || break
-        done
-
-        PAYLOAD=$(jq -n --argjson devices "$TRUNCATED_ARRAY" --arg timestamp "$TIMESTAMP" \
-            '{ merge_variables: { devices_list: $devices, last_scan: $timestamp, truncated: true }}')
-
-        PAYLOAD_SIZE=${#PAYLOAD}
-        TRUNCATED_COUNT=$(echo "$TRUNCATED_ARRAY" | jq 'length')
-        log "${YELLOW}Truncated payload size: ${PAYLOAD_SIZE} bytes (${TRUNCATED_COUNT} of ${DEVICE_COUNT} devices)${NC}"
-    fi
-
-    # ----------------------------
-    # Send to TRMNL
-    # ----------------------------
-    WEBHOOK_URL="https://usetrmnl.com/api/custom_plugins/$PLUGIN_UUID"
-    RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$WEBHOOK_URL" \
+    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+        -X POST "$TRMNL_URL" \
         -H "Content-Type: application/json" \
         -d "$PAYLOAD")
 
-    HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+    echo "[INFO] TRMNL HTTP response: $RESPONSE"
 
-    if [[ "$HTTP_CODE" =~ 20[01] ]]; then
-        log "${GREEN}✓ Sent successfully (${PAYLOAD_SIZE} bytes, ${DEVICE_COUNT} devices)${NC}"
-    elif [[ "$HTTP_CODE" == 429 ]]; then
-        log "${YELLOW}⚠ Rate limited (429)${NC}"
-    else
-        log "${RED}✗ Error sending to TRMNL (HTTP $HTTP_CODE)${NC}"
-    fi
+    echo "$CURRENT_MAP" > "$STATE_FILE"
+    echo "[INFO] State file updated."
 }
 
 # ----------------------------
