@@ -37,6 +37,21 @@ resolve_hostname() {
     echo "$hostname"
 }
 
+get_local_mac() {
+    local IP="$1"
+    # Get MAC address for local IP from network interfaces
+    ip addr show | awk -v ip="$IP" '
+        /inet / {
+            split($2, a, "/")
+            current_ip = a[1]
+        }
+        /link\/ether/ && current_ip == ip {
+            print toupper($2)
+            exit
+        }
+    '
+}
+
 # ----------------------------
 # Perform full scan
 # ----------------------------
@@ -104,6 +119,37 @@ perform_scan() {
 
             CURRENT_IP=""
             CURRENT_HOSTNAME=""
+        fi
+    done <<< "$NMAP_OUTPUT"
+
+    # ----------------------------
+    # 3️⃣ Add devices without MAC (local device)
+    # ----------------------------
+    # Process nmap output again for devices without MAC addresses
+    while IFS= read -r line; do
+        if [[ $line == *"Nmap scan report"* ]]; then
+            IP=$(echo "$line" | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b")
+
+            # Check if device already has a MAC
+            HAS_MAC=$(jq --arg ip "$IP" '[.[] | select(.ip==$ip)] | .[0].mac // ""' "$TEMP_FILE")
+
+            if [ "$HAS_MAC" = '""' ]; then
+                # This is likely the local device - try to get its MAC
+                LOCAL_MAC=$(get_local_mac "$IP")
+
+                if [ -n "$LOCAL_MAC" ]; then
+                    HOSTNAME=$(echo "$line" | sed -n 's/Nmap scan report for \(.*\)/\1/p')
+                    [ -z "$HOSTNAME" ] && HOSTNAME="$IP"
+                    VENDOR=$(lookup_vendor "$LOCAL_MAC")
+
+                    jq --arg ip "$IP" \
+                       --arg hostname "$HOSTNAME" \
+                       --arg mac "$LOCAL_MAC" \
+                       --arg vendor "$VENDOR" \
+                       '. += [{"ip": $ip, "hostname": $hostname, "mac": $mac, "vendor": $vendor}]' \
+                       "$TEMP_FILE" > "$TEMP_FILE.tmp" && mv "$TEMP_FILE.tmp" "$TEMP_FILE"
+                fi
+            fi
         fi
     done <<< "$NMAP_OUTPUT"
 
