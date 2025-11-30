@@ -335,70 +335,66 @@ perform_scan() {
 # Send data to TRMNL
 # ----------------------------
 send_to_trmnl() {
+    DEVICES_JSON="[]"
+
     echo "[INFO] Preparing payload for TRMNL..."
 
     # Require PLUGIN_UUID
-    if [ -z "$PLUGIN_UUID" ]; then
-        echo "[ERROR] PLUGIN_UUID is not set"
+    if [ -z "$2" ]; then
+        echo "[ERROR] PLUGIN_UUID is not set; aborting"
         return
     fi
+    PLUGIN_UUID="$2"
 
     # Ensure state file exists
     if [ ! -f "$STATE_FILE" ]; then
         echo "{}" > "$STATE_FILE"
     fi
 
-    CURRENT_MAP=$(cat "$STATE_FILE")
+    CURRENT_STATE=$(cat "$STATE_FILE")
 
-    # Start fresh array
-    DEVICES_JSON="[]"
+    echo "[INFO] Adding online devices from scan..."
 
-    echo "[INFO] Adding online devices from ARP scan..."
+    # Add online devices from JSON input ($1)
+    while IFS= read -r device; do
+        IP=$(echo "$device" | jq -r '.ip')
+        MAC=$(echo "$device" | jq -r '.mac // ""')
+        VENDOR=$(echo "$device" | jq -r '.vendor // ""')
+        HOST=$(echo "$device" | jq -r '.hostname // ""')
 
-    # Ensure DISCOVERED_DEVICES is actually populated
-    for KEY in "${!DISCOVERED_DEVICES[@]}"; do
-        IFS='|' read -r IP MAC VENDOR HOST <<< "$KEY"
         DEVICES_JSON=$(echo "$DEVICES_JSON" | jq \
             --arg ip "$IP" \
             --arg mac "$MAC" \
             --arg vendor "$VENDOR" \
             --arg host "$HOST" \
             '. += [{ip: $ip, mac: $mac, vendor: $vendor, hostname: $host, online: 1}]')
-    done
+    done < <(echo "$1" | jq -c '.[]')
 
     echo "[INFO] Checking for offline devices..."
 
-    OFFLINE_JSON=$(echo "$CURRENT_MAP" | jq -r '.devices // [] | map(select(.online == 0))')
+    # Add offline devices from previous state that were seen recently
+    OFFLINE_JSON=$(echo "$CURRENT_STATE" | jq -r '.devices // [] | map(select(.online == 0))')
 
     if [ "$OFFLINE_JSON" != "[]" ]; then
-        DEVICES_JSON=$(jq -s '.[0] + .[1]' \
-            <(echo "$DEVICES_JSON") \
-            <(echo "$OFFLINE_JSON"))
+        DEVICES_JSON=$(jq -s '.[0] + .[1]' <(echo "$DEVICES_JSON") <(echo "$OFFLINE_JSON"))
     fi
 
     FINAL_COUNT=$(echo "$DEVICES_JSON" | jq 'length')
     echo "[INFO] Final device count: $FINAL_COUNT"
 
-    # FIX: busybox-safe epoch
+    # Safe epoch timestamp
     EPOCH=$(busybox date +%s)
 
+    # Build payload
     PAYLOAD=$(jq -n \
-        --arg uuid "$GATEWAY_UUID" \
-        --arg epoch "$EPOCH" \
-        --arg interval "$SCAN_INTERVAL" \
         --argjson devices "$DEVICES_JSON" \
-        '{
-            gateway_uuid: $uuid,
-            timestamp: ($epoch | tonumber),
-            scan_interval: ($interval | tonumber),
-            devices: $devices
-        }'
-    )
+        --arg epoch "$EPOCH" \
+        '{devices: $devices, timestamp: ($epoch|tonumber)}')
 
     RAW_BYTES=$(printf "%s" "$PAYLOAD" | wc -c)
     echo "[INFO] Payload raw size: $RAW_BYTES bytes"
 
-    # Restored original curl logic
+    # Original webhook logic
     WEBHOOK_URL="https://usetrmnl.com/api/custom_plugins/$PLUGIN_UUID"
 
     echo "[INFO] Sending raw JSON payload to TRMNL..."
@@ -411,7 +407,7 @@ send_to_trmnl() {
 
     echo "[INFO] TRMNL HTTP response: $HTTP_CODE"
 
-    # Update state
+    # Update state file
     echo "$PAYLOAD" > "$STATE_FILE"
     echo "[INFO] State file updated."
 }
