@@ -263,14 +263,92 @@ send_to_trmnl() {
 
     TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+    # Build initial payload to check size
     PAYLOAD=$(jq -n \
         --argjson devices "$DEVICES_ARRAY" \
         --arg timestamp "$TIMESTAMP" \
         '{ merge_variables: { devices_list: $devices, last_scan: $timestamp }}')
 
+    PAYLOAD_SIZE=${#PAYLOAD}
+    DEVICE_COUNT=$(echo "$DEVICES_ARRAY" | jq 'length')
+
     WEBHOOK_URL="https://usetrmnl.com/api/custom_plugins/$PLUGIN_UUID"
 
     log "${BLUE}Sending to TRMNL...${NC}"
+    log "${YELLOW}Payload size: ${PAYLOAD_SIZE} bytes (limit: ${BYTE_LIMIT}, devices: ${DEVICE_COUNT})${NC}"
+
+    # If payload exceeds limit, truncate devices (prioritize online devices)
+    if [ "$PAYLOAD_SIZE" -gt "$BYTE_LIMIT" ]; then
+        log "${RED}WARNING: Payload is ${PAYLOAD_SIZE} bytes (limit: ${BYTE_LIMIT})${NC}"
+        log "${YELLOW}Truncating device list (keeping online devices first)...${NC}"
+
+        # Separate online and offline devices
+        ONLINE_ARRAY='[]'
+        OFFLINE_ARRAY='[]'
+
+        DEVICE_STRINGS=$(echo "$DEVICES_ARRAY" | jq -r '.[]')
+        while IFS= read -r device_str; do
+            TS=$(echo "$device_str" | cut -d'|' -f5)
+            TIME_DIFF=$((CURRENT_TIMESTAMP - TS))
+
+            # If seen within last 10 minutes, it's online
+            if [ "$TIME_DIFF" -lt 600 ]; then
+                ONLINE_ARRAY=$(echo "$ONLINE_ARRAY" | jq --arg d "$device_str" '. += [$d]')
+            else
+                OFFLINE_ARRAY=$(echo "$OFFLINE_ARRAY" | jq --arg d "$device_str" '. += [$d]')
+            fi
+        done <<< "$DEVICE_STRINGS"
+
+        # Add online devices first, then offline until we hit limit
+        TRUNCATED_ARRAY='[]'
+
+        # Add all online devices first
+        echo "$ONLINE_ARRAY" | jq -r '.[]' | while read -r device_str; do
+            TEST_ARRAY=$(echo "$TRUNCATED_ARRAY" | jq --arg d "$device_str" '. += [$d]')
+            TEST_PAYLOAD=$(jq -n \
+                --argjson devices "$TEST_ARRAY" \
+                --arg timestamp "$TIMESTAMP" \
+                '{ merge_variables: { devices_list: $devices, last_scan: $timestamp }}')
+
+            if [ ${#TEST_PAYLOAD} -lt $((BYTE_LIMIT - 100)) ]; then
+                TRUNCATED_ARRAY="$TEST_ARRAY"
+            else
+                break
+            fi
+        done
+
+        # Add offline devices if space remains
+        echo "$OFFLINE_ARRAY" | jq -r '.[]' | while read -r device_str; do
+            TEST_ARRAY=$(echo "$TRUNCATED_ARRAY" | jq --arg d "$device_str" '. += [$d]')
+            TEST_PAYLOAD=$(jq -n \
+                --argjson devices "$TEST_ARRAY" \
+                --arg timestamp "$TIMESTAMP" \
+                '{ merge_variables: { devices_list: $devices, last_scan: $timestamp }}')
+
+            if [ ${#TEST_PAYLOAD} -lt $((BYTE_LIMIT - 100)) ]; then
+                TRUNCATED_ARRAY="$TEST_ARRAY"
+            else
+                break
+            fi
+        done
+
+        TRUNCATED_COUNT=$(echo "$TRUNCATED_ARRAY" | jq 'length')
+
+        PAYLOAD=$(jq -n \
+            --argjson devices "$TRUNCATED_ARRAY" \
+            --arg timestamp "$TIMESTAMP" \
+            '{ merge_variables: { devices_list: $devices, last_scan: $timestamp, truncated: true }}')
+
+        PAYLOAD_SIZE=${#PAYLOAD}
+        log "${YELLOW}Truncated payload size: ${PAYLOAD_SIZE} bytes (showing ${TRUNCATED_COUNT} of ${DEVICE_COUNT} devices)${NC}"
+    fi
+
+    # Final safety check
+    if [ "$PAYLOAD_SIZE" -gt "$BYTE_LIMIT" ]; then
+        log "${RED}ERROR: Payload still exceeds limit after truncation (${PAYLOAD_SIZE} bytes)${NC}"
+        return 1
+    fi
+
     RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$WEBHOOK_URL" \
         -H "Content-Type: application/json" \
         -d "$PAYLOAD")
@@ -278,7 +356,7 @@ send_to_trmnl() {
     HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
 
     if [[ "$HTTP_CODE" == 200 || "$HTTP_CODE" == 201 ]]; then
-        log "${GREEN}✓ Sent successfully${NC}"
+        log "${GREEN}✓ Sent successfully (${PAYLOAD_SIZE} bytes, ${DEVICE_COUNT} devices)${NC}"
     elif [[ "$HTTP_CODE" == 429 ]]; then
         log "${YELLOW}⚠ Rate limited (429)${NC}"
     else
