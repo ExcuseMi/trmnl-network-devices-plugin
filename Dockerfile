@@ -1,11 +1,22 @@
-FROM alpine:latest
+FROM python:3.11-alpine
 
-RUN apk add --no-cache bash curl jq nmap iproute2 iputils arp-scan avahi-tools bind-tools samba-client nbtscan
+# Install system dependencies
+RUN apk add --no-cache \
+    nmap \
+    arp-scan \
+    iproute2 \
+    iputils \
+    avahi-tools \
+    bind-tools \
+    curl
+
+# Install Python dependencies
+RUN pip install --no-cache-dir requests
 
 WORKDIR /app
 
-COPY scan.sh /app/scan.sh
+COPY scan.py /app/scan.py
 
-RUN chmod +x /app/scan.sh
+RUN chmod +x /app/scan.py
 
-ENTRYPOINT ["/app/scan.sh"]
+ENTRYPOINT ["python3", "/app/scan.py"]
