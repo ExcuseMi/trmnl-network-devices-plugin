@@ -10,7 +10,7 @@ NC='\033[0m'
 # Vendor DB URL
 VENDOR_DB_URL="https://raw.githubusercontent.com/trezor/trezor-firmware/master/common/vendor_db.txt"
 VENDOR_DB="/tmp/device-vendors.txt"
-
+declare -Ag DISCOVERED_DEVICES
 log() {
     echo -e "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >&2
 }
@@ -343,19 +343,19 @@ send_to_trmnl() {
         return
     fi
 
-    # Ensure the state file exists
+    # Ensure state file exists
     if [ ! -f "$STATE_FILE" ]; then
         echo "{}" > "$STATE_FILE"
     fi
 
     CURRENT_MAP=$(cat "$STATE_FILE")
 
-    # Start fresh device list
+    # Start fresh array
     DEVICES_JSON="[]"
 
     echo "[INFO] Adding online devices from ARP scan..."
 
-    # Add all online devices
+    # Ensure DISCOVERED_DEVICES is actually populated
     for KEY in "${!DISCOVERED_DEVICES[@]}"; do
         IFS='|' read -r IP MAC VENDOR HOST <<< "$KEY"
         DEVICES_JSON=$(echo "$DEVICES_JSON" | jq \
@@ -368,20 +368,23 @@ send_to_trmnl() {
 
     echo "[INFO] Checking for offline devices..."
 
-    # Re-include offline devices from the last state
     OFFLINE_JSON=$(echo "$CURRENT_MAP" | jq -r '.devices // [] | map(select(.online == 0))')
 
     if [ "$OFFLINE_JSON" != "[]" ]; then
-        DEVICES_JSON=$(jq -s '.[0] + .[1]' <(echo "$DEVICES_JSON") <(echo "$OFFLINE_JSON"))
+        DEVICES_JSON=$(jq -s '.[0] + .[1]' \
+            <(echo "$DEVICES_JSON") \
+            <(echo "$OFFLINE_JSON"))
     fi
 
     FINAL_COUNT=$(echo "$DEVICES_JSON" | jq 'length')
     echo "[INFO] Final device count: $FINAL_COUNT"
 
-    # Build final payload
+    # FIX: busybox-safe epoch
+    EPOCH=$(busybox date +%s)
+
     PAYLOAD=$(jq -n \
         --arg uuid "$GATEWAY_UUID" \
-        --arg epoch "$(date +%s)" \
+        --arg epoch "$EPOCH" \
         --arg interval "$SCAN_INTERVAL" \
         --argjson devices "$DEVICES_JSON" \
         '{
@@ -395,7 +398,7 @@ send_to_trmnl() {
     RAW_BYTES=$(printf "%s" "$PAYLOAD" | wc -c)
     echo "[INFO] Payload raw size: $RAW_BYTES bytes"
 
-    # Restored original webhook logic
+    # Restored original curl logic
     WEBHOOK_URL="https://usetrmnl.com/api/custom_plugins/$PLUGIN_UUID"
 
     echo "[INFO] Sending raw JSON payload to TRMNL..."
@@ -405,11 +408,10 @@ send_to_trmnl() {
         -d "$PAYLOAD")
 
     HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-    BODY=$(echo "$RESPONSE" | head -n -1)
 
     echo "[INFO] TRMNL HTTP response: $HTTP_CODE"
 
-    # Update the state file
+    # Update state
     echo "$PAYLOAD" > "$STATE_FILE"
     echo "[INFO] State file updated."
 }
