@@ -1,57 +1,121 @@
 #!/bin/bash
 
-# ----------------------------
 # Colors for output
-# ----------------------------
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
-NC='\033[0m'
+NC='\033[0m' # No Color
 
-# ----------------------------
-# Logging
-# ----------------------------
 log() {
     echo -e "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >&2
 }
 
 # ----------------------------
-# Load device DB for custom vendor names
+# Auto-download IEEE OUI DB
 # ----------------------------
-DEVICE_DB_FILE="/app/device-db.json"
-if [ ! -f "$DEVICE_DB_FILE" ]; then
-    echo "{}" > "$DEVICE_DB_FILE"
+OUI_FILE="/tmp/oui.txt"
+if [ ! -f "$OUI_FILE" ]; then
+    log "${BLUE}Downloading latest IEEE OUI database...${NC}"
+    if ! curl -s -L https://standards-oui.ieee.org/oui/oui.txt -o "$OUI_FILE"; then
+        log "${RED}Failed to download IEEE OUI database. Vendor lookup will be limited.${NC}"
+    else
+        log "${GREEN}IEEE OUI database downloaded successfully.${NC}"
+    fi
 fi
-DEVICE_DB=$(cat "$DEVICE_DB_FILE")
 
-# ----------------------------
-# Function: resolve MAC to vendor / device
-# ----------------------------
 lookup_vendor() {
     local MAC="$1"
-    MAC_PREFIX=$(echo "$MAC" | tr 'a-f' 'A-F' | sed 's/://g' | cut -c1-6)
-    VENDOR=$(grep -i "^$MAC_PREFIX" /usr/share/misc/oui.txt | awk -F'\t' '{print $3}' | head -1)
-    if [ -z "$VENDOR" ] || [ "$VENDOR" = "" ]; then
-        VENDOR=$(echo "$DEVICE_DB" | jq -r --arg mac "$MAC_PREFIX" '.[$mac] // empty')
+    if [ -z "$MAC" ]; then
+        echo "Unknown"
+        return
     fi
+    MAC_PREFIX=$(echo "$MAC" | tr 'a-f' 'A-F' | sed 's/://g' | cut -c1-6)
+    VENDOR=$(grep -i "^$MAC_PREFIX" "$OUI_FILE" | awk -F'\t' '{print $3}' | head -1)
     echo "${VENDOR:-Unknown}"
 }
 
-# ----------------------------
-# Function: resolve hostname from IP
-# ----------------------------
 resolve_hostname() {
     local IP="$1"
     hostname=$(getent hosts "$IP" | awk '{print $2}')
-    if [ -z "$hostname" ]; then hostname="$IP"; fi
+    [ -z "$hostname" ] && hostname="$IP"
     echo "$hostname"
 }
 
-# ----------------------------
-# Function: send data to TRMNL
-# Must be defined before main loop
-# ----------------------------
+perform_scan() {
+    local NETWORK="$1"
+    log "${BLUE}Starting network scan on $NETWORK${NC}"
+
+    SCAN_START=$(date +%s)
+    TEMP_FILE=$(mktemp)
+    echo "[]" > "$TEMP_FILE"
+
+    # ----------------------------
+    # ARP-scan (L2)
+    # ----------------------------
+    if command -v arp-scan >/dev/null 2>&1; then
+        ARP_OUTPUT=$(sudo arp-scan --localnet 2>/dev/null || true)
+        while read -r ip mac _; do
+            [ -z "$ip" ] && continue
+            [ "$ip" = "Interface:" ] && continue
+            hostname=$(resolve_hostname "$ip")
+            vendor=$(lookup_vendor "$mac")
+            TEMP_CONTENT=$(cat "$TEMP_FILE")
+            echo "$TEMP_CONTENT" | jq --arg ip "$ip" \
+                                      --arg hostname "$hostname" \
+                                      --arg mac "$mac" \
+                                      --arg vendor "$vendor" \
+                                      '. += [{"ip": $ip, "hostname": $hostname, "mac": $mac, "vendor": $vendor}]' \
+                                      > "$TEMP_FILE"
+        done <<< "$(echo "$ARP_OUTPUT" | awk '/([0-9]{1,3}\.){3}[0-9]{1,3}/ {print $1, $2, $3}')"
+    else
+        log "${YELLOW}arp-scan not found, skipping L2 scan${NC}"
+    fi
+
+    # ----------------------------
+    # Fallback: nmap ping scan
+    # ----------------------------
+    if command -v nmap >/dev/null 2>&1; then
+        NMAP_OUTPUT=$(nmap -sn -T4 --max-retries 1 "$NETWORK" 2>/dev/null)
+        CURRENT_IP=""
+        CURRENT_HOSTNAME=""
+        while IFS= read -r line; do
+            if [[ $line == *"Nmap scan report"* ]]; then
+                IP=$(echo "$line" | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b")
+                EXISTS=$(cat "$TEMP_FILE" | jq --arg ip "$IP" 'map(.ip==$ip) | any')
+                if [ "$EXISTS" = "true" ]; then
+                    CURRENT_IP=""
+                    CURRENT_HOSTNAME=""
+                    continue
+                fi
+                CURRENT_IP="$IP"
+                CURRENT_HOSTNAME=$(echo "$line" | sed -n 's/Nmap scan report for \(.*\)/\1/p')
+                [ -z "$CURRENT_HOSTNAME" ] && CURRENT_HOSTNAME="$CURRENT_IP"
+            elif [[ $line == *"MAC Address"* ]] && [ ! -z "$CURRENT_IP" ]; then
+                MAC=$(echo "$line" | awk '{print $3}')
+                vendor=$(lookup_vendor "$MAC")
+                TEMP_CONTENT=$(cat "$TEMP_FILE")
+                echo "$TEMP_CONTENT" | jq --arg ip "$CURRENT_IP" \
+                                          --arg hostname "$CURRENT_HOSTNAME" \
+                                          --arg mac "$MAC" \
+                                          --arg vendor "$vendor" \
+                                          '. += [{"ip": $ip, "hostname": $hostname, "mac": $mac, "vendor": $vendor}]' \
+                                          > "$TEMP_FILE"
+                CURRENT_IP=""
+                CURRENT_HOSTNAME=""
+            fi
+        done <<< "$NMAP_OUTPUT"
+    fi
+
+    SCAN_END=$(date +%s)
+    SCAN_DURATION=$((SCAN_END - SCAN_START))
+    log "${YELLOW}Scan took ${SCAN_DURATION} seconds${NC}"
+
+    DEVICES=$(cat "$TEMP_FILE" | jq 'sort_by(.ip)')
+    rm "$TEMP_FILE"
+    echo "$DEVICES"
+}
+
 send_to_trmnl() {
     local DEVICES="$1"
     local PLUGIN_UUID="$2"
@@ -60,13 +124,11 @@ send_to_trmnl() {
     CURRENT_TIMESTAMP=$(date +%s)
     CURRENT_MAP='{}'
 
-    # Build current device map
     echo "$DEVICES" | jq -r '.[] | "\(.mac // .ip)"' | while read -r id; do
         [ -z "$id" ] && continue
         CURRENT_MAP=$(echo "$CURRENT_MAP" | jq --arg id "$id" --arg ts "$CURRENT_TIMESTAMP" '. + {($id): {last_seen: $ts}}')
     done
 
-    # Build device array for TRMNL
     DEVICES_ARRAY='[]'
     while IFS= read -r device; do
         IP=$(echo "$device" | jq -r '.ip')
@@ -81,7 +143,6 @@ send_to_trmnl() {
             '. + {($id): {last_seen: $ts, ip: $ip, hostname: $hostname, mac: $mac, vendor: $vendor}}')
     done < <(echo "$DEVICES" | jq -c '.[]')
 
-    # Merge previous offline devices
     if [ -f "$STATE_FILE" ]; then
         PREVIOUS_DEVICES=$(cat "$STATE_FILE")
         CUTOFF=$((CURRENT_TIMESTAMP - 86400))
@@ -108,7 +169,9 @@ send_to_trmnl() {
     PAYLOAD=$(jq -n --argjson devices "$DEVICES_ARRAY" --arg timestamp "$TIMESTAMP" \
         '{ merge_variables: { devices_list: $devices, last_scan: $timestamp } }')
 
+    PAYLOAD_SIZE=${#PAYLOAD}
     WEBHOOK_URL="https://usetrmnl.com/api/custom_plugins/$PLUGIN_UUID"
+    log "${BLUE}Sending data to TRMNL...${NC}"
     RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$WEBHOOK_URL" \
         -H "Content-Type: application/json" -d "$PAYLOAD")
     HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
@@ -123,80 +186,7 @@ send_to_trmnl() {
 }
 
 # ----------------------------
-# Perform scan
-# ----------------------------
-perform_scan() {
-    local NETWORK="$1"
-    log "${BLUE}Starting network scan on $NETWORK${NC}"
-
-    SCAN_START=$(date +%s)
-    TEMP_FILE=$(mktemp)
-    echo "[]" > "$TEMP_FILE"
-
-    # --- ARP scan
-    if command -v arp-scan >/dev/null 2>&1; then
-        ARP_IF=$(ip route | awk '/default/ {print $5}' | head -1)
-        ARP_OUTPUT=$(sudo arp-scan --interface="$ARP_IF" "$NETWORK" 2>/dev/null || true)
-        while read -r ip mac vendor; do
-            [ -z "$ip" ] && continue
-            [ "$ip" = "Interface:" ] && continue
-            hostname=$(resolve_hostname "$ip")
-            vendor=$(lookup_vendor "$mac")
-            TEMP_CONTENT=$(cat "$TEMP_FILE")
-            echo "$TEMP_CONTENT" | jq --arg ip "$ip" \
-                                      --arg hostname "$hostname" \
-                                      --arg mac "$mac" \
-                                      --arg vendor "$vendor" \
-                                      '. += [{"ip": $ip, "hostname": $hostname, "mac": $mac, "vendor": $vendor}]' \
-                                      > "$TEMP_FILE"
-        done <<< "$(echo "$ARP_OUTPUT" | awk '/([0-9]{1,3}\.){3}[0-9]{1,3}/ {print $1, $2, $3}')"
-    else
-        log "${YELLOW}arp-scan not found, skipping L2 scan${NC}"
-    fi
-
-    # --- Nmap fallback
-    NMAP_OUTPUT=$(nmap -sn -T4 --max-retries 1 "$NETWORK" 2>/dev/null)
-    CURRENT_IP=""
-    CURRENT_HOSTNAME=""
-    while IFS= read -r line; do
-        if [[ $line == *"Nmap scan report"* ]]; then
-            IP=$(echo "$line" | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b")
-            EXISTS=$(cat "$TEMP_FILE" | jq --arg ip "$IP" 'map(.ip==$ip) | any')
-            if [ "$EXISTS" = "true" ]; then
-                CURRENT_IP=""
-                CURRENT_HOSTNAME=""
-                continue
-            fi
-            CURRENT_IP="$IP"
-            CURRENT_HOSTNAME=$(echo "$line" | sed -n 's/Nmap scan report for \(.*\)/\1/p')
-            [ -z "$CURRENT_HOSTNAME" ] && CURRENT_HOSTNAME="$CURRENT_IP"
-        elif [[ $line == *"MAC Address"* ]] && [ ! -z "$CURRENT_IP" ]; then
-            MAC=$(echo "$line" | awk '{print $3}')
-            VENDOR=$(echo "$line" | cut -d'(' -f2 | cut -d')' -f1)
-            TEMP_CONTENT=$(cat "$TEMP_FILE")
-            echo "$TEMP_CONTENT" | jq --arg ip "$CURRENT_IP" \
-                                      --arg hostname "$CURRENT_HOSTNAME" \
-                                      --arg mac "$MAC" \
-                                      --arg vendor "$VENDOR" \
-                                      '. += [{"ip": $ip, "hostname": $hostname, "mac": $mac, "vendor": $vendor}]' \
-                                      > "$TEMP_FILE"
-            CURRENT_IP=""
-            CURRENT_HOSTNAME=""
-        fi
-    done <<< "$NMAP_OUTPUT"
-
-    SCAN_END=$(date +%s)
-    SCAN_DURATION=$((SCAN_END - SCAN_START))
-    log "${YELLOW}Scan took ${SCAN_DURATION} seconds${NC}"
-
-    # Sort by IP
-    DEVICES=$(cat "$TEMP_FILE" | jq 'sort_by(.ip)')
-    rm "$TEMP_FILE"
-    echo "$DEVICES"
-}
-
-# ----------------------------
-# Main
+# Main script
 # ----------------------------
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE} Network Scanner with TRMNL${NC}"
@@ -208,12 +198,12 @@ if [ ! -z "$PLUGIN_UUID" ]; then
     INTERVAL=${INTERVAL:-15}
     log "${BLUE}Scan interval: $INTERVAL minutes${NC}"
 else
-    log "${YELLOW}Single scan mode${NC}"
+    log "${YELLOW}TRMNL mode disabled (single scan)${NC}"
 fi
 
-# Auto-detect network
 if [ -z "$NETWORK" ]; then
     GATEWAY=$(ip route | grep default | awk '{print $3}')
+    [ -z "$GATEWAY" ] && { log "${RED}Could not detect network automatically.${NC}"; exit 1; }
     NETWORK=$(echo $GATEWAY | cut -d'.' -f1-3).0/24
     log "${GREEN}Auto-detected network: $NETWORK${NC}"
 else
@@ -229,14 +219,13 @@ while true; do
     DEVICES=$(perform_scan "$NETWORK")
     echo "$DEVICES" | jq -r '.[] | " • \(.hostname) (\(.ip)) - \(.mac) [\(.vendor)]"'
 
-    if [ ! -z "$PLUGIN_UUID" ]; then
-        send_to_trmnl "$DEVICES" "$PLUGIN_UUID"
-    else
+    [ ! -z "$PLUGIN_UUID" ] && send_to_trmnl "$DEVICES" "$PLUGIN_UUID"
+
+    if [ -z "$PLUGIN_UUID" ]; then
         log "${GREEN}Single scan complete!${NC}"
         break
     fi
 
-    SLEEP_SECONDS=$((INTERVAL*60))
     log "${BLUE}Sleeping for $INTERVAL minutes...${NC}"
-    sleep $SLEEP_SECONDS
+    sleep $((INTERVAL*60))
 done
