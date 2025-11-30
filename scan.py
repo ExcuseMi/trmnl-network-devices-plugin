@@ -463,12 +463,10 @@ def send_to_trmnl(devices: List[Dict]):
 
     log(f"Old state has {len(state)} devices", Colors.BLUE)
     if state:
-        log("Old state data:", Colors.BLUE)
-        for identifier, data in state.items():
-            last_seen = data.get('last_seen', 0)
-            age_minutes = (current_timestamp - last_seen) // 60
-            log(f"  {identifier}: {data.get('ip')} ({data.get('hostname')}) - last seen {age_minutes}m ago",
-                Colors.BLUE)
+        log("=" * 60, Colors.BLUE)
+        log("FULL OLD STATE JSON:", Colors.BLUE)
+        log(json.dumps(state, indent=2), Colors.BLUE)
+        log("=" * 60, Colors.BLUE)
 
     # Build current map
     current_map = {}
@@ -499,6 +497,7 @@ def send_to_trmnl(devices: List[Dict]):
         }
 
     # Add offline devices (seen in last 24h)
+    # YES - we use the OLD timestamp (last_seen) so the display knows when they were last online
     offline_count = 0
     for identifier, data in state.items():
         last_seen = data.get('last_seen', 0)
@@ -514,8 +513,13 @@ def send_to_trmnl(devices: List[Dict]):
             if vendor and 'unknown' in vendor.lower():
                 vendor = ''
 
+            # Use OLD timestamp (last_seen) not current_timestamp
             device_str = f"{data.get('ip')}|{hostname}|{data.get('mac')}|{vendor}|{data.get('type', 'Network Device')}|{last_seen}"
             devices_list.append(device_str)
+
+            age_minutes = (current_timestamp - last_seen) // 60
+            log(f"  Adding offline device: {data.get('ip')} ({data.get('hostname')}) - last seen {age_minutes}m ago (timestamp: {last_seen})",
+                Colors.YELLOW)
 
     log(f"Added {offline_count} offline devices from state", Colors.YELLOW if offline_count > 0 else Colors.BLUE)
 
@@ -576,9 +580,11 @@ def send_to_trmnl(devices: List[Dict]):
         payload_json = json.dumps(payload)
         log(f"Truncated to {len(truncated)} devices ({len(payload_json)} bytes)", Colors.YELLOW)
 
-    # Log final payload
-    log("Final payload:", Colors.GREEN)
-    log(payload_json[:500] + "..." if len(payload_json) > 500 else payload_json, Colors.GREEN)
+    # Log FULL payload
+    log("=" * 60, Colors.GREEN)
+    log("FULL PAYLOAD JSON:", Colors.GREEN)
+    log(json.dumps(payload, indent=2), Colors.GREEN)
+    log("=" * 60, Colors.GREEN)
 
     # Send to webhook
     try:
