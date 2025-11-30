@@ -53,14 +53,9 @@ See `PLUGIN_SETTINGS.yaml` for configuration options.
 
 **No devices showing?**
 ```bash
-docker-compose logs -f
+docker-compose logs -f network-scanner
 ```
-
-**Too slow?**
-```bash
-docker build -f Dockerfile.fast -t network-scanner:fast .
-```
-
+                                
 ## Updating
 
 ```bash
