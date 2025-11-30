@@ -6,7 +6,6 @@ services:
     image: network-scanner:latest
     container_name: network-scanner
 
-    # Critical for ARP/MAC/Wi-Fi visibility
     network_mode: host
     pid: host
     privileged: true
@@ -22,8 +21,6 @@ services:
       BYTE_LIMIT: ${BYTE_LIMIT}
 
     volumes:
-      # Access host ARP table
       - /proc/net/arp:/host/arp:ro
-      # Access DHCP leases if present
       - /var/lib/misc:/host/dhcp:ro
       - /var/lib/dhcp:/host/dhcp2:ro

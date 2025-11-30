@@ -1,7 +1,6 @@
 FROM alpine:latest
 
-# Install tools
-RUN apk add --no-cache nmap bash curl jq iproute2 iputils
+RUN apk add --no-cache nmap bash curl jq iproute2 iputils arp-scan
 
 WORKDIR /app
 

@@ -2,99 +2,109 @@
 
 echo "Starting UNIVERSAL network scanner..."
 
-INTERVAL="${INTERVAL:-60}"
 PLUGIN_UUID="${PLUGIN_UUID:-unknown}"
+INTERVAL_MINUTES="${INTERVAL:-1}"
+INTERVAL=$((INTERVAL_MINUTES * 60))
+
 BYTE_LIMIT="${BYTE_LIMIT:-50000}"
 
+timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
+
 # -----------------------------
-# Discover local network subnet
+# Detect correct interface & subnet
 # -----------------------------
-get_subnet() {
-    ip route | awk '/src/ {print $1; exit}'
+detect_subnet() {
+    iface=$(ip route show default | awk '{print $5}' | head -n1)
+
+    ip_addr=$(ip -o -f inet addr show "$iface" | awk '{print $4}')
+    echo "$ip_addr"
 }
 
 # -----------------------------
-# Parse ARP table from host
+# ARP table reader
 # -----------------------------
-read_arp_table() {
+read_arp() {
     if [ -f /host/arp ]; then
-        cat /host/arp | tail -n +2 | awk '{print $1","$3}'
+        grep -E "([0-9]{1,3}\.){3}[0-9]{1,3}" /host/arp \
+        | awk '{print $1","$4}'
     fi
 }
 
 # -----------------------------
-# DHCP lease discovery
+# Direct ARP scan (most accurate)
 # -----------------------------
-read_dhcp_leases() {
-    for f in /host/dhcp/*.leases /host/dhcp2/*.leases; do
-        [ -f "$f" ] || continue
-        awk '{print $3","$2}' "$f"
-    done
+arp_sweep() {
+    arp-scan --interface="$iface" --localnet 2>/dev/null \
+        | awk '/[0-9a-f]{2}:/ {print $1","$2}'
 }
 
 # -----------------------------
-# ICMP ping sweep
+# Nmap ping fallback
 # -----------------------------
-ping_sweep() {
-    nmap -sn "$SUBNET" -oG - | awk '/Up$/{print $2",nmap"}'
+nmap_ping() {
+    nmap -sn "$SUBNET" 2>/dev/null \
+        | grep "Nmap scan report" \
+        | awk '{print $5",alive"}'
 }
 
 # -----------------------------
-# Merge & output devices
+# Send to TRMNL
 # -----------------------------
 send_to_trmnl() {
-    local json="$1"
     curl -s -X POST "https://plugin.trmnl.me/$PLUGIN_UUID" \
         -H "Content-Type: application/json" \
-        --data "$json" >/dev/null
+        --data "$1" >/dev/null
 }
 
 # -----------------------------
-# Main loop
+# MAIN LOOP
 # -----------------------------
 while true; do
-    SUBNET="$(get_subnet)"
-    echo "[`date '+%Y-%m-%d %H:%M:%S'`] Scanning network: $SUBNET"
+    SUBNET=$(detect_subnet)
+    iface=$(ip route show default | awk '{print $5}' | head -n1)
+
+    echo "[`timestamp`] Scanning network: $SUBNET on $iface"
 
     declare -A devices
 
-    # ARP table
+    # 1. ARP sweep
     while IFS=',' read -r ip mac; do
         [ -z "$ip" ] && continue
-        devices["$ip,mac"]="$mac"
-    done < <(read_arp_table)
+        devices["$ip"]="$mac"
+    done < <(arp_sweep)
 
-    # DHCP leases
+    # 2. Host ARP table
     while IFS=',' read -r ip mac; do
         [ -z "$ip" ] && continue
-        devices["$ip,dhcp"]="$mac"
-    done < <(read_dhcp_leases)
+        devices["$ip"]="$mac"
+    done < <(read_arp)
 
-    # Nmap ping sweep
-    while IFS=',' read -r ip src; do
+    # 3. nmap fallback
+    while IFS=',' read -r ip alive; do
         [ -z "$ip" ] && continue
-        devices["$ip,ping"]="alive"
-    done < <(ping_sweep)
+        devices["$ip"]="${devices[$ip]}"
+    done < <(nmap_ping)
 
     echo "Devices detected:"
+
+    # JSON output
     json="{\"devices\":["
     first=true
 
-    for key in "${!devices[@]}"; do
-        ip="${key%%,*}"
-        info="${devices[$key]}"
-
-        echo " • $ip  MAC:$info"
+    for ip in "${!devices[@]}"; do
+        mac="${devices[$ip]}"
+        echo " • $ip  MAC:$mac"
 
         [ "$first" = true ] || json+=","
         first=false
-        json+="{\"ip\":\"$ip\",\"mac\":\"$info\"}"
+
+        json+="{\"ip\":\"$ip\",\"mac\":\"$mac\"}"
     done
 
     json+="]}"
 
     send_to_trmnl "$json"
-    echo "[`date '+%Y-%m-%d %H:%M:%S'`] Sent updated device list to TRMNL"
+    echo "[`timestamp`] Sent updated device list to TRMNL"
 
     sleep "$INTERVAL"
 done
