@@ -1,0 +1,19 @@
+services:
+  network-scanner:
+    build: .
+    image: network-scanner:latest
+    container_name: network-scanner
+    network_mode: host
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Optional: Override network detection
+      NETWORK: ${NETWORK}
+      
+      # These come from .env file:
+      PLUGIN_UUID: ${PLUGIN_UUID}
+      INTERVAL: ${INTERVAL}
+      BYTE_LIMIT: ${BYTE_LIMIT}
+    # For debugging, you can view logs with:
+    # docker-compose logs -f network-scanner
