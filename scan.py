@@ -59,7 +59,7 @@ def download_vendor_db():
 def lookup_vendor(mac: str) -> str:
     """Look up vendor by MAC address OUI"""
     if not mac:
-        return "Unknown"
+        return ""
 
     try:
         # Get first 3 octets (OUI)
@@ -75,17 +75,17 @@ def lookup_vendor(mac: str) -> str:
                     # Return long name if available, otherwise short name
                     vendor = parts[2] if len(parts) >= 3 else parts[1]
 
-                    # Clean up common non-vendor entries
+                    # Clean up common non-vendor entries - return empty for these
                     vendor_lower = vendor.lower()
-                    if vendor_lower in ['unknown', 'private']:
-                        return "Unknown"
+                    if any(x in vendor_lower for x in ['unknown', 'private', 'locally administered']):
+                        return ""
 
                     return vendor
 
-        return "Unknown"
+        return ""
     except Exception as e:
         log(f"Error looking up vendor for {mac}: {e}", Colors.RED)
-        return "Unknown"
+        return ""
 
 
 def resolve_hostname(ip: str, state: Dict) -> str:
@@ -283,7 +283,7 @@ def scan_arp() -> List[Dict]:
                 devices.append({
                     'ip': ip,
                     'mac': mac,
-                    'vendor': vendor if vendor else "Unknown"
+                    'vendor': vendor  # Can be empty string
                 })
 
         log(f"arp-scan found {len(devices)} devices", Colors.GREEN)
@@ -416,7 +416,7 @@ def perform_scan() -> List[Dict]:
             'ip': ip,
             'hostname': hostname,
             'mac': mac,
-            'vendor': vendor or 'Unknown',
+            'vendor': vendor,  # Can be empty string
             'type': device_type
         })
 
