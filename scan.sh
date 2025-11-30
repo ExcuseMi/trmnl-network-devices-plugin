@@ -85,6 +85,106 @@ get_local_mac() {
     '
 }
 
+detect_device_type() {
+    local hostname="$1"
+    local vendor="$2"
+
+    # Convert to lowercase for matching
+    local h=$(echo "$hostname" | tr '[:upper:]' '[:lower:]')
+    local v=$(echo "$vendor" | tr '[:upper:]' '[:lower:]')
+
+    # Routers and Network Equipment
+    if [[ "$v" =~ (tp-link|netgear|linksys|asus|ubiquiti|unifi|d-link|sagemcom) ]] || \
+       [[ "$h" =~ (router|gateway|modem|access.*point) ]]; then
+        echo "Router"
+        return
+    fi
+
+    # Raspberry Pi
+    if [[ "$v" =~ raspberry ]] || [[ "$h" =~ (raspberry|pi|pihole) ]]; then
+        echo "Raspberry Pi"
+        return
+    fi
+
+    # Printers
+    if [[ "$v" =~ (brother|hp|epson|canon|lexmark) ]] || [[ "$h" =~ printer ]]; then
+        echo "Printer"
+        return
+    fi
+
+    # Smart Home Devices
+    if [[ "$v" =~ (tuya|philips.*hue|wyze) ]] || [[ "$h" =~ (smart|hue|bulb|plug|switch) ]]; then
+        echo "Smart Device"
+        return
+    fi
+
+    # Speakers/Audio
+    if [[ "$v" =~ (sonos|bose|slim.*devices) ]] || [[ "$h" =~ (speaker|sonos|squeezebox) ]]; then
+        echo "Speaker"
+        return
+    fi
+
+    # Apple Devices
+    if [[ "$v" =~ apple ]] || [[ "$h" =~ (iphone|ipad|macbook|imac|airpod) ]]; then
+        echo "Apple Device"
+        return
+    fi
+
+    # Google Devices
+    if [[ "$v" =~ google ]] || [[ "$h" =~ (chromecast|nest|google.*home) ]]; then
+        echo "Google Device"
+        return
+    fi
+
+    # Samsung
+    if [[ "$v" =~ samsung ]] || [[ "$h" =~ (galaxy|samsung) ]]; then
+        echo "Samsung Device"
+        return
+    fi
+
+    # Computers/Laptops
+    if [[ "$h" =~ (desktop|laptop|pc|macbook|imac|surface) ]]; then
+        echo "Computer"
+        return
+    fi
+
+    # Gaming
+    if [[ "$v" =~ (sony|microsoft|nintendo|valve) ]] || \
+       [[ "$h" =~ (playstation|xbox|ps4|ps5|switch|steamdeck|steam.*deck) ]]; then
+        echo "Gaming Console"
+        return
+    fi
+
+    # Phones/Tablets
+    if [[ "$h" =~ (phone|mobile|tablet|ipad|galaxy.*tab) ]] || \
+       [[ "$v" =~ (redmi.*pad|realtek.*wireless) ]]; then
+        echo "Mobile Device"
+        return
+    fi
+
+    # TV/Streaming
+    if [[ "$v" =~ (roku|nvidia|lg|samsung.*tv|vizio) ]] || \
+       [[ "$h" =~ (tv|roku|shield|appletv) ]]; then
+        echo "TV/Streaming"
+        return
+    fi
+
+    # Cameras
+    if [[ "$h" =~ (camera|cam|doorbell) ]]; then
+        echo "Camera"
+        return
+    fi
+
+    # NAS/Storage
+    if [[ "$h" =~ (nas|storage|synology|qnap) ]]; then
+        echo "NAS"
+        return
+    fi
+
+    # Default fallback
+    echo "Network Device"
+}
+
 # State file for caching hostnames and tracking devices
 STATE_FILE="/tmp/network_scanner_state.json"
 
@@ -110,12 +210,14 @@ perform_scan() {
             [ -z "$ip" ] && continue
             hostname=$(resolve_hostname "$ip")
             [ -z "$vendor" ] && vendor=$(lookup_vendor "$mac")
+            device_type=$(detect_device_type "$hostname" "$vendor")
 
             jq --arg ip "$ip" \
                --arg hostname "$hostname" \
                --arg mac "$mac" \
                --arg vendor "$vendor" \
-               '. += [{"ip": $ip, "hostname": $hostname, "mac": $mac, "vendor": $vendor}]' \
+               --arg type "$device_type" \
+               '. += [{"ip": $ip, "hostname": $hostname, "mac": $mac, "vendor": $vendor, "type": $type}]' \
                "$TEMP_FILE" > "$TEMP_FILE.tmp" && mv "$TEMP_FILE.tmp" "$TEMP_FILE"
         done <<< "$(echo "$ARP_OUTPUT" | awk '/([0-9]{1,3}\.){3}[0-9]{1,3}/ {print $1, $2, $3}')"
     else
@@ -149,12 +251,14 @@ perform_scan() {
             MAC=$(echo "$line" | awk '{print $3}')
             VENDOR=$(echo "$line" | cut -d'(' -f2 | cut -d')' -f1)
             [ -z "$VENDOR" ] && VENDOR=$(lookup_vendor "$MAC")
+            DEVICE_TYPE=$(detect_device_type "$CURRENT_HOSTNAME" "$VENDOR")
 
             jq --arg ip "$CURRENT_IP" \
                --arg hostname "$CURRENT_HOSTNAME" \
                --arg mac "$MAC" \
                --arg vendor "$VENDOR" \
-               '. += [{"ip": $ip, "hostname": $hostname, "mac": $mac, "vendor": $vendor}]' \
+               --arg type "$DEVICE_TYPE" \
+               '. += [{"ip": $ip, "hostname": $hostname, "mac": $mac, "vendor": $vendor, "type": $type}]' \
                "$TEMP_FILE" > "$TEMP_FILE.tmp" && mv "$TEMP_FILE.tmp" "$TEMP_FILE"
 
             CURRENT_IP=""
@@ -178,15 +282,19 @@ perform_scan() {
                 LOCAL_MAC=$(get_local_mac "$IP")
 
                 if [ -n "$LOCAL_MAC" ]; then
-                    HOSTNAME=$(echo "$line" | sed -n 's/Nmap scan report for \(.*\)/\1/p')
-                    [ -z "$HOSTNAME" ] && HOSTNAME="$IP"
+                    HOSTNAME=$(echo "$line" | sed -n 's/Nmap scan report for \(.*\)/\1/p' | sed 's/ (.*)$//')
+                    if [ "$HOSTNAME" = "$IP" ] || [ -z "$HOSTNAME" ]; then
+                        HOSTNAME=$(resolve_hostname "$IP")
+                    fi
                     VENDOR=$(lookup_vendor "$LOCAL_MAC")
+                    DEVICE_TYPE=$(detect_device_type "$HOSTNAME" "$VENDOR")
 
                     jq --arg ip "$IP" \
                        --arg hostname "$HOSTNAME" \
                        --arg mac "$LOCAL_MAC" \
                        --arg vendor "$VENDOR" \
-                       '. += [{"ip": $ip, "hostname": $hostname, "mac": $mac, "vendor": $vendor}]' \
+                       --arg type "$DEVICE_TYPE" \
+                       '. += [{"ip": $ip, "hostname": $hostname, "mac": $mac, "vendor": $vendor, "type": $type}]' \
                        "$TEMP_FILE" > "$TEMP_FILE.tmp" && mv "$TEMP_FILE.tmp" "$TEMP_FILE"
                 fi
             fi
@@ -221,6 +329,7 @@ send_to_trmnl() {
         HOSTNAME=$(echo "$device" | jq -r '.hostname')
         MAC=$(echo "$device" | jq -r '.mac')
         VENDOR=$(echo "$device" | jq -r '.vendor')
+        TYPE=$(echo "$device" | jq -r '.type // "Network Device"')
 
         IDENTIFIER="${MAC:-$IP}"
 
@@ -229,15 +338,15 @@ send_to_trmnl() {
             HOSTNAME=""
         fi
 
-        # Send actual timestamp instead of 1
-        DEVICE_STR="$IP|$HOSTNAME|$MAC|$VENDOR|$CURRENT_TIMESTAMP"
+        # Format: IP|Hostname|MAC|Vendor|Type|Timestamp
+        DEVICE_STR="$IP|$HOSTNAME|$MAC|$VENDOR|$TYPE|$CURRENT_TIMESTAMP"
         DEVICES_ARRAY=$(echo "$DEVICES_ARRAY" | jq --arg d "$DEVICE_STR" '. += [$d]')
 
         CURRENT_MAP=$(echo "$CURRENT_MAP" | jq --arg id "$IDENTIFIER" \
             --arg ts "$CURRENT_TIMESTAMP" \
             --arg ip "$IP" --arg hostname "$HOSTNAME" \
-            --arg mac "$MAC" --arg vendor "$VENDOR" \
-            '. + {($id): {last_seen: $ts, ip: $ip, hostname: $hostname, mac: $mac, vendor: $vendor}}')
+            --arg mac "$MAC" --arg vendor "$VENDOR" --arg type "$TYPE" \
+            '. + {($id): {last_seen: $ts, ip: $ip, hostname: $hostname, mac: $mac, vendor: $vendor, type: $type}}')
 
     done < <(echo "$DEVICES" | jq -c '.[]')
 
@@ -256,6 +365,7 @@ send_to_trmnl() {
                 P_HN=$(echo "$entry" | jq -r '.value.hostname')
                 P_MAC=$(echo "$entry" | jq -r '.value.mac')
                 P_VEND=$(echo "$entry" | jq -r '.value.vendor')
+                P_TYPE=$(echo "$entry" | jq -r '.value.type // "Network Device"')
 
                 # Don't send hostname if it's same as IP (save bytes)
                 if [ "$P_HN" = "$P_IP" ]; then
@@ -263,7 +373,7 @@ send_to_trmnl() {
                 fi
 
                 # Send the old timestamp (when it was last seen)
-                DEVICE_STR="$P_IP|$P_HN|$P_MAC|$P_VEND|$TS"
+                DEVICE_STR="$P_IP|$P_HN|$P_MAC|$P_VEND|$P_TYPE|$TS"
                 DEVICES_ARRAY=$(echo "$DEVICES_ARRAY" | jq --arg d "$DEVICE_STR" '. += [$d]')
             fi
         done
@@ -419,5 +529,4 @@ while true; do
     SLEEP_SECONDS=$((INTERVAL * 60))
     log "${BLUE}Sleeping for $INTERVAL minutes...${NC}"
     sleep $SLEEP_SECONDS
-done
 done
