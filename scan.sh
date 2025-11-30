@@ -335,97 +335,99 @@ perform_scan() {
 # Send data to TRMNL
 # ----------------------------
 send_to_trmnl() {
+    # BusyBox-safe, no gzip/base64, avoids subshell variable loss
 
-    echo "[INFO] Preparing payload for TRMNL...]
+    # Ensure required vars/defaults
+    SCAN_INTERVAL="${SCAN_INTERVAL:-60}"
+    STATE_FILE="${STATE_FILE:-/tmp/network_scanner_state.json}"
 
-    # Validate URL
     if [ -z "$TRMNL_URL" ]; then
-        echo "[ERROR] TRMNL_URL is missing, cannot POST"
+        printf '%s\n' "[ERROR] TRMNL_URL is not set; aborting send_to_trmnl" >&2
         return 1
     fi
 
-    # Ensure scan interval
-    SCAN_INTERVAL="${SCAN_INTERVAL:-60}"
-
     # Ensure state file exists
     if [ ! -f "$STATE_FILE" ]; then
-        echo "{}" > "$STATE_FILE"
+        printf '%s\n' "{}" > "$STATE_FILE"
     fi
 
-    CURRENT_MAP=$(cat "$STATE_FILE")
+    # Load state (safe)
+    CURRENT_MAP=$(cat "$STATE_FILE" 2>/dev/null || printf '%s' "{}")
 
-    DEVICES_ARRAY=$(echo "[]" | jq '.')
+    # Create an empty JSON array for devices
+    DEVICES_ARRAY='[]'
 
     TS=$(date +%s)
 
+    printf '%s\n' "[INFO] Adding online devices from ARP scan..." >&2
 
-    # ---------------------------------------------------------
-    # ONLINE DEVICES
-    # ---------------------------------------------------------
-    echo "[INFO] Adding online devices from ARP scan..."
+    # Read DISCOVERED_DEVICES without a pipe (keeps variables in this shell)
+    # DISCOVERED_DEVICES expected: lines of "IP|HOSTNAME|MAC|VENDOR|TYPE"
+    if [ -n "$DISCOVERED_DEVICES" ]; then
+        while IFS='|' read -r IP HOSTNAME MAC VENDOR TYPE; do
+            [ -z "$IP" ] && continue
 
-    while IFS="|" read -r IP HOSTNAME MAC VENDOR TYPE; do
-        [ -z "$IP" ] && continue
+            STATUS=1
+            DEVICE_STR="${IP}|${HOSTNAME}|${MAC}|${VENDOR}|${TYPE}|${TS}|${STATUS}"
 
-        STATUS=1
+            # Append device string into JSON array
+            DEVICES_ARRAY=$(printf '%s' "$DEVICES_ARRAY" | jq --arg d "$DEVICE_STR" '. += [$d]')
 
-        DEVICE_STR="$IP|$HOSTNAME|$MAC|$VENDOR|$TYPE|$TS|$STATUS"
+            # Use MAC as identifier if present, otherwise IP
+            if [ -n "$MAC" ]; then
+                ID="$MAC"
+            else
+                ID="$IP"
+            fi
 
-        DEVICES_ARRAY=$(echo "$DEVICES_ARRAY" | jq --arg d "$DEVICE_STR" '. += [$d]')
-
-        ID="$MAC"
-
-        CURRENT_MAP=$(echo "$CURRENT_MAP" | jq --arg id "$ID" \
-            --arg ts "$TS" \
-            --arg ip "$IP" \
-            --arg hn "$HOSTNAME" \
-            --arg mac "$MAC" \
-            --arg vendor "$VENDOR" \
-            --arg type "$TYPE" \
-            '. + {($id): {last_seen:$ts, ip:$ip, hostname:$hn, mac:$mac, vendor:$vendor, type:$type}}')
-
-    done <<EOF
+            # Update current map with last_seen and metadata
+            CURRENT_MAP=$(printf '%s' "$CURRENT_MAP" | jq --arg id "$ID" \
+                --arg ts "$TS" \
+                --arg ip "$IP" \
+                --arg hn "$HOSTNAME" \
+                --arg mac "$MAC" \
+                --arg vendor "$VENDOR" \
+                --arg type "$TYPE" \
+                '. + {($id): {last_seen: ($ts|tonumber), ip: $ip, hostname: $hn, mac: $mac, vendor: $vendor, type: $type}}')
+        done <<EOF
 $DISCOVERED_DEVICES
 EOF
+    else
+        printf '%s\n' "[INFO] No discovered devices present (DISCOVERED_DEVICES empty)" >&2
+    fi
 
+    printf '%s\n' "[INFO] Checking for offline devices from state..." >&2
 
-    # ---------------------------------------------------------
-    # OFFLINE DEVICES
-    # ---------------------------------------------------------
-    echo "[INFO] Checking for offline devices..."
-
-    for ID in $(echo "$CURRENT_MAP" | jq -r 'keys[]'); do
-
-        LAST_SEEN=$(echo "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].last_seen')
+    # Iterate state keys safely
+    for ID in $(printf '%s' "$CURRENT_MAP" | jq -r 'keys[]' 2>/dev/null); do
+        LAST_SEEN=$(printf '%s' "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].last_seen' 2>/dev/null)
         [ -z "$LAST_SEEN" ] && continue
 
+        # If device hasn't been seen within scan interval -> treat as offline
         if [ $((TS - LAST_SEEN)) -gt "$SCAN_INTERVAL" ]; then
+            IP=$(printf '%s' "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].ip' 2>/dev/null)
+            MAC=$(printf '%s' "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].mac' 2>/dev/null)
 
-            IP=$(echo "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].ip')
-            MAC=$(echo "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].mac')
+            # Skip if no identifier present
             [ -z "$IP" ] && [ -z "$MAC" ] && continue
 
-            HOSTNAME=$(echo "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].hostname')
-            VENDOR=$(echo "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].vendor')
-            TYPE=$(echo "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].type')
+            HOSTNAME=$(printf '%s' "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].hostname' 2>/dev/null)
+            VENDOR=$(printf '%s' "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].vendor' 2>/dev/null)
+            TYPE=$(printf '%s' "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].type' 2>/dev/null)
 
             STATUS=0
+            DEVICE_STR="${IP}|${HOSTNAME}|${MAC}|${VENDOR}|${TYPE}|${LAST_SEEN}|${STATUS}"
 
-            DEVICE_STR="$IP|$HOSTNAME|$MAC|$VENDOR|$TYPE|$LAST_SEEN|$STATUS"
-
-            DEVICES_ARRAY=$(echo "$DEVICES_ARRAY" | jq --arg d "$DEVICE_STR" '. += [$d]')
+            DEVICES_ARRAY=$(printf '%s' "$DEVICES_ARRAY" | jq --arg d "$DEVICE_STR" '. += [$d]')
         fi
     done
 
+    COUNT=$(printf '%s' "$DEVICES_ARRAY" | jq 'length' 2>/dev/null || printf '0')
+    printf '%s\n' "[INFO] Final device count: $COUNT" >&2
 
-    # ---------------------------------------------------------
-    # BUILD JSON PAYLOAD
-    # ---------------------------------------------------------
-    COUNT=$(echo "$DEVICES_ARRAY" | jq 'length')
-    echo "[INFO] Final device count: $COUNT"
-
+    # Build raw JSON payload; devices stored as array of strings (compact)
     PAYLOAD=$(jq -n \
-        --arg gateway_uuid "$GATEWAY_UUID" \
+        --arg gateway_uuid "${GATEWAY_UUID:-}" \
         --argjson scan_interval "$SCAN_INTERVAL" \
         --argjson timestamp "$TS" \
         --arg devices "$DEVICES_ARRAY" \
@@ -436,26 +438,24 @@ EOF
             devices: ($devices | fromjson)
         }')
 
-    RAW_BYTES=$(printf "%s" "$PAYLOAD" | wc -c)
-    echo "[INFO] Payload raw size: $RAW_BYTES bytes"
+    RAW_BYTES=$(printf '%s' "$PAYLOAD" | wc -c)
+    printf '%s\n' "[INFO] Payload raw size: $RAW_BYTES bytes" >&2
 
+    printf '%s\n' "[INFO] Sending raw JSON payload to TRMNL..." >&2
 
-    # ---------------------------------------------------------
-    # SEND TO TRMNL
-    # ---------------------------------------------------------
-    echo "[INFO] Sending raw JSON payload to TRMNL..."
-
-    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+    # POST and capture HTTP code
+    HTTP_CODE=$(curl -s -w '%{http_code}' -o /dev/null \
         -X POST "$TRMNL_URL" \
-        -H "Content-Type: application/json" \
-        -d "$PAYLOAD")
+        -H 'Content-Type: application/json' \
+        -d "$PAYLOAD" || printf '000')
 
-    echo "[INFO] TRMNL HTTP response: $RESPONSE"
+    printf '%s\n' "[INFO] TRMNL HTTP response: $HTTP_CODE" >&2
 
+    # Persist updated state
+    printf '%s' "$CURRENT_MAP" > "$STATE_FILE"
+    printf '%s\n' "[INFO] State file updated at $STATE_FILE" >&2
 
-    # Save updated state
-    echo "$CURRENT_MAP" > "$STATE_FILE"
-    echo "[INFO] State file updated."
+    return 0
 }
 
 # ----------------------------
