@@ -335,21 +335,20 @@ perform_scan() {
 # Send data to TRMNL
 # ----------------------------
 send_to_trmnl() {
-    local DEVICES_JSON="[]"
+    local DEVICES="$1"
+    local PLUGIN_UUID="$2"
+    local BYTE_LIMIT=${BYTE_LIMIT:-2000}
     local EPOCH
     local FINAL_COUNT
     local RAW_BYTES
     local TRUNCATED_JSON
-    local BYTE_LIMIT=${BYTE_LIMIT:-2000}
 
     echo "[INFO] Preparing payload for TRMNL..."
 
-    # Require PLUGIN_UUID
-    if [ -z "$2" ]; then
-        echo "[ERROR] PLUGIN_UUID is not set; aborting"
+    if [ -z "$PLUGIN_UUID" ]; then
+        echo "[ERROR] PLUGIN_UUID is not set; aborting send_to_trmnl"
         return 1
     fi
-    local PLUGIN_UUID="$2"
 
     # Ensure state file exists
     if [ ! -f "$STATE_FILE" ]; then
@@ -359,31 +358,24 @@ send_to_trmnl() {
     CURRENT_STATE=$(cat "$STATE_FILE")
 
     echo "[INFO] Adding online devices from scan..."
-
-    # Add online devices from JSON input ($1)
+    local DEVICES_JSON="[]"
     while IFS= read -r device; do
-        local IP
-        local MAC
-        local VENDOR
-        local HOST
-        IP=$(echo "$device" | jq -r '.ip')
-        MAC=$(echo "$device" | jq -r '.mac // ""')
-        VENDOR=$(echo "$device" | jq -r '.vendor // ""')
-        HOST=$(echo "$device" | jq -r '.hostname // ""')
+        local IP=$(echo "$device" | jq -r '.ip')
+        local MAC=$(echo "$device" | jq -r '.mac // ""')
+        local VENDOR=$(echo "$device" | jq -r '.vendor // ""')
+        local HOST=$(echo "$device" | jq -r '.hostname // ""')
 
-        DEVICES_JSON=$(echo "$DEVICES_JSON" | jq \
-            --arg ip "$IP" \
+        DEVICES_JSON=$(echo "$DEVICES_JSON" | jq --arg ip "$IP" \
             --arg mac "$MAC" \
             --arg vendor "$VENDOR" \
             --arg host "$HOST" \
-            '. += [{ip: $ip, mac: $mac, vendor: $vendor, hostname: $host, online: 1}]')
-    done < <(echo "$1" | jq -c '.[]')
+            '. += [{ip:$ip, mac:$mac, vendor:$vendor, hostname:$host, online:1}]')
+    done < <(echo "$DEVICES" | jq -c '.[]')
 
     echo "[INFO] Checking for offline devices..."
-
-    # Add offline devices from previous state if they exist
+    # Extract offline devices from previous state
     local OFFLINE_JSON
-    OFFLINE_JSON=$(echo "$CURRENT_STATE" | jq -r '.devices // [] | map(select(.online == 0))')
+    OFFLINE_JSON=$(echo "$CURRENT_STATE" | jq -r '.devices // [] | map(select(.online==0))')
 
     if [ "$OFFLINE_JSON" != "[]" ]; then
         DEVICES_JSON=$(jq -s '.[0] + .[1]' <(echo "$DEVICES_JSON") <(echo "$OFFLINE_JSON"))
@@ -392,39 +384,30 @@ send_to_trmnl() {
     FINAL_COUNT=$(echo "$DEVICES_JSON" | jq 'length')
     echo "[INFO] Final device count: $FINAL_COUNT"
 
-    # Epoch timestamp
-    EPOCH=$(busybox date +%s)
-
-    # -------------------------
-    # Truncate payload to BYTE_LIMIT
-    # -------------------------
+    EPOCH=$(date +%s)
     TRUNCATED_JSON="[]"
 
-    # Separate online/offline devices
-    local ONLINE_JSON
+    # Separate online and offline devices
+    local ONLINE_JSON OFFLINE_JSON
     ONLINE_JSON=$(echo "$DEVICES_JSON" | jq '[.[] | select(.online==1)]')
     OFFLINE_JSON=$(echo "$DEVICES_JSON" | jq '[.[] | select(.online==0)]')
 
-    # Add online devices first
-    for dev in $(echo "$ONLINE_JSON" | jq -c '.[]'); do
-        local TEST_JSON
-        TEST_JSON=$(echo "$TRUNCATED_JSON" | jq --argjson d "$dev" '. += [$d]')
-        local TEST_PAYLOAD
-        TEST_PAYLOAD=$(jq -n --argjson devices "$TEST_JSON" --arg epoch "$EPOCH" '{devices:$devices,timestamp:($epoch|tonumber)}')
-        if [ $(printf "%s" "$TEST_PAYLOAD" | wc -c) -le $BYTE_LIMIT ]; then
+    # Truncate online devices safely
+    echo "$ONLINE_JSON" | jq -c '.[]' | while IFS= read -r dev; do
+        local TEST_JSON=$(echo "$TRUNCATED_JSON" | jq --argjson d "$dev" '. += [$d]')
+        local TEST_PAYLOAD=$(jq -n --argjson devices "$TEST_JSON" --arg epoch "$EPOCH" '{devices:$devices,timestamp:($epoch|tonumber)}')
+        if [ $(printf "%s" "$TEST_PAYLOAD" | wc -c) -le "$BYTE_LIMIT" ]; then
             TRUNCATED_JSON="$TEST_JSON"
         else
             break
         fi
     done
 
-    # Add offline devices if space permits
-    for dev in $(echo "$OFFLINE_JSON" | jq -c '.[]'); do
-        local TEST_JSON
-        TEST_JSON=$(echo "$TRUNCATED_JSON" | jq --argjson d "$dev" '. += [$d]')
-        local TEST_PAYLOAD
-        TEST_PAYLOAD=$(jq -n --argjson devices "$TEST_JSON" --arg epoch "$EPOCH" '{devices:$devices,timestamp:($epoch|tonumber)}')
-        if [ $(printf "%s" "$TEST_PAYLOAD" | wc -c) -le $BYTE_LIMIT ]; then
+    # Truncate offline devices safely
+    echo "$OFFLINE_JSON" | jq -c '.[]' | while IFS= read -r dev; do
+        local TEST_JSON=$(echo "$TRUNCATED_JSON" | jq --argjson d "$dev" '. += [$d]')
+        local TEST_PAYLOAD=$(jq -n --argjson devices "$TEST_JSON" --arg epoch "$EPOCH" '{devices:$devices,timestamp:($epoch|tonumber)}')
+        if [ $(printf "%s" "$TEST_PAYLOAD" | wc -c) -le "$BYTE_LIMIT" ]; then
             TRUNCATED_JSON="$TEST_JSON"
         else
             break
@@ -434,18 +417,14 @@ send_to_trmnl() {
     # Build final payload
     local PAYLOAD
     PAYLOAD=$(jq -n --argjson devices "$TRUNCATED_JSON" --arg epoch "$EPOCH" '{devices:$devices,timestamp:($epoch|tonumber)}')
-
     RAW_BYTES=$(printf "%s" "$PAYLOAD" | wc -c)
     echo "[INFO] Payload raw size: $RAW_BYTES bytes"
 
     # -------------------------
     # Send payload to TRMNL
     # -------------------------
-    local WEBHOOK_URL
-    WEBHOOK_URL="https://usetrmnl.com/api/custom_plugins/$PLUGIN_UUID"
-
+    local WEBHOOK_URL="https://usetrmnl.com/api/custom_plugins/$PLUGIN_UUID"
     echo "[INFO] Sending raw JSON payload to TRMNL..."
-
     local RESPONSE
     RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$WEBHOOK_URL" \
         -H "Content-Type: application/json" \
@@ -455,7 +434,7 @@ send_to_trmnl() {
     HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
     echo "[INFO] TRMNL HTTP response: $HTTP_CODE"
 
-    # Update state file with truncated payload
+    # Update state file
     echo "$PAYLOAD" > "$STATE_FILE"
     echo "[INFO] State file updated."
 }
