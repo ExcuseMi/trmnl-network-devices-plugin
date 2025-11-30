@@ -138,8 +138,12 @@ perform_scan() {
             [ "$EXISTS" = "true" ] && continue
 
             CURRENT_IP="$IP"
-            CURRENT_HOSTNAME=$(echo "$line" | sed -n 's/Nmap scan report for \(.*\)/\1/p')
-            [ -z "$CURRENT_HOSTNAME" ] && CURRENT_HOSTNAME="$CURRENT_IP"
+            # Extract hostname and remove IP in parentheses if present
+            CURRENT_HOSTNAME=$(echo "$line" | sed -n 's/Nmap scan report for \(.*\)/\1/p' | sed 's/ (.*)$//')
+            # If hostname is just the IP, resolve it
+            if [ "$CURRENT_HOSTNAME" = "$IP" ] || [ -z "$CURRENT_HOSTNAME" ]; then
+                CURRENT_HOSTNAME=$(resolve_hostname "$IP")
+            fi
 
         elif [[ $line == *"MAC Address"* ]] && [ -n "$CURRENT_IP" ]; then
             MAC=$(echo "$line" | awk '{print $3}')
