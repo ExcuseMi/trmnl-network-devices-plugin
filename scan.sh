@@ -335,23 +335,46 @@ perform_scan() {
 # Send data to TRMNL
 # ----------------------------
 send_to_trmnl() {
+
     echo "[INFO] Preparing payload for TRMNL..."
 
-    TS=$(date +%s)
+    # --------------------------------------------------------------------
+    # Ensure scan interval is set (fallback 60)
+    # --------------------------------------------------------------------
+    SCAN_INTERVAL="${SCAN_INTERVAL:-60}"
+
+    # --------------------------------------------------------------------
+    # Ensure state file exists
+    # --------------------------------------------------------------------
+    if [ ! -f "$STATE_FILE" ]; then
+        echo "{}" > "$STATE_FILE"
+    fi
+
+    # Load state
     CURRENT_MAP=$(cat "$STATE_FILE")
+
+    # JSON array for final devices
     DEVICES_ARRAY=$(echo "[]" | jq '.')
 
+    TS=$(date +%s)
+
+    # --------------------------------------------------------------------
+    # Add ONLINE devices (from ARP scan)
+    # --------------------------------------------------------------------
     echo "[INFO] Adding online devices from ARP scan..."
+
     echo "$DISCOVERED_DEVICES" | while IFS="|" read -r IP HOSTNAME MAC VENDOR TYPE; do
         [ -z "$IP" ] && continue
 
-        STATUS=1
+        STATUS=1  # online
 
         DEVICE_STR="$IP|$HOSTNAME|$MAC|$VENDOR|$TYPE|$TS|$STATUS"
 
         DEVICES_ARRAY=$(echo "$DEVICES_ARRAY" | jq --arg d "$DEVICE_STR" '. += [$d]')
 
+        # unique ID is MAC
         ID="$MAC"
+
         CURRENT_MAP=$(echo "$CURRENT_MAP" | jq --arg id "$ID" \
             --arg ts "$TS" \
             --arg ip "$IP" \
@@ -360,27 +383,32 @@ send_to_trmnl() {
             --arg vendor "$VENDOR" \
             --arg type "$TYPE" \
             '. + {($id): {last_seen:$ts, ip:$ip, hostname:$hn, mac:$mac, vendor:$vendor, type:$type}}')
+
     done
 
+    # --------------------------------------------------------------------
+    # Add OFFLINE devices from state
+    # --------------------------------------------------------------------
     echo "[INFO] Checking for offline devices..."
+
     echo "$CURRENT_MAP" | jq -r 'keys[]' | while read -r ID; do
         LAST_SEEN=$(echo "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].last_seen')
         [ -z "$LAST_SEEN" ] && continue
 
-        NOW=$TS
-        DIFF=$((NOW - LAST_SEEN))
+        # If not seen in the last interval, it's offline
+        if [ $((TS - LAST_SEEN)) -gt "$SCAN_INTERVAL" ]; then
 
-        if [ "$DIFF" -gt "$SCAN_INTERVAL" ]; then
             IP=$(echo "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].ip')
             MAC=$(echo "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].mac')
 
+            # Skip completely empty entries
             [ -z "$IP" ] && [ -z "$MAC" ] && continue
 
             HOSTNAME=$(echo "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].hostname')
             VENDOR=$(echo "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].vendor')
             TYPE=$(echo "$CURRENT_MAP" | jq -r --arg id "$ID" '.[$id].type')
 
-            STATUS=0
+            STATUS=0  # offline
 
             DEVICE_STR="$IP|$HOSTNAME|$MAC|$VENDOR|$TYPE|$LAST_SEEN|$STATUS"
 
@@ -388,25 +416,28 @@ send_to_trmnl() {
         fi
     done
 
-    echo "[INFO] Final device count: $(echo "$DEVICES_ARRAY" | jq 'length')"
+    COUNT=$(echo "$DEVICES_ARRAY" | jq 'length')
+    echo "[INFO] Final device count: $COUNT"
 
+    # --------------------------------------------------------------------
+    # Build final JSON payload (raw, no encoding)
+    # --------------------------------------------------------------------
     PAYLOAD=$(jq -n \
         --arg gateway_uuid "$GATEWAY_UUID" \
-        --arg scan_interval "$SCAN_INTERVAL" \
-        --arg ts "$TS" \
+        --argjson scan_interval "$SCAN_INTERVAL" \
+        --argjson timestamp "$TS" \
         --arg devices "$DEVICES_ARRAY" \
         '{
             gateway_uuid: $gateway_uuid,
-            scan_interval: ($scan_interval | tonumber),
-            timestamp: ($ts | tonumber),
+            scan_interval: $scan_interval,
+            timestamp: $timestamp,
             devices: ($devices | fromjson)
         }')
 
     RAW_BYTES=$(printf "%s" "$PAYLOAD" | wc -c)
-
     echo "[INFO] Payload raw size: $RAW_BYTES bytes"
-    echo "[INFO] Sending raw JSON payload to TRMNL..."
 
+    echo "[INFO] Sending raw JSON payload to TRMNL..."
     RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
         -X POST "$TRMNL_URL" \
         -H "Content-Type: application/json" \
@@ -414,6 +445,7 @@ send_to_trmnl() {
 
     echo "[INFO] TRMNL HTTP response: $RESPONSE"
 
+    # Save updated state
     echo "$CURRENT_MAP" > "$STATE_FILE"
     echo "[INFO] State file updated."
 }
