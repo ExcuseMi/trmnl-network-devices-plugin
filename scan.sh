@@ -358,14 +358,16 @@ send_to_trmnl() {
 
         [ "$HOSTNAME" = "$IP" ] && HOSTNAME=""
 
-        DEVICE_STR="$IP|$HOSTNAME|$MAC|$VENDOR|$TYPE|$CURRENT_TIMESTAMP"
-        DEVICES_ARRAY=$(echo "$DEVICES_ARRAY" | jq --arg d "$DEVICE_STR" '. += [$d]')
-
-        CURRENT_MAP=$(echo "$CURRENT_MAP" | jq --arg id "$IDENTIFIER" \
-            --arg ts "$CURRENT_TIMESTAMP" \
-            --arg ip "$IP" --arg hostname "$HOSTNAME" \
-            --arg mac "$MAC" --arg vendor "$VENDOR" --arg type "$TYPE" \
-            '. + {($id): {last_seen: $ts, ip: $ip, hostname: $hostname, mac: $mac, vendor: $vendor, type: $type}}')
+        # Skip offline entries with no identifier
+        if [ -n "$P_IP" ] || [ -n "$P_MAC" ]; then
+            DEVICE_STR="$P_IP|$P_HN|$P_MAC|$P_VEND|$P_TYPE|$TS"
+            DEVICES_ARRAY=$(echo "$DEVICES_ARRAY" | jq --arg d "$DEVICE_STR" '. += [$d]')
+            CURRENT_MAP=$(echo "$CURRENT_MAP" | jq --arg id "$ID" \
+                --arg ts "$TS" \
+                --arg ip "$P_IP" --arg hostname "$P_HN" \
+                --arg mac "$P_MAC" --arg vendor "$P_VEND" --arg type "$P_TYPE" \
+                '. + {($id): {last_seen: $ts, ip: $ip, hostname: $hostname, mac: $mac, vendor: $vendor, type: $type}}')
+        fi
     done < <(echo "$DEVICES" | jq -c '.[]')
 
     # ----------------------------
