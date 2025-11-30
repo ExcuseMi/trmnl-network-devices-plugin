@@ -32,8 +32,41 @@ lookup_vendor() {
 
 resolve_hostname() {
     local IP="$1"
-    hostname=$(getent hosts "$IP" | awk '{print $2}')
+    local hostname=""
+
+    # Try multiple methods to resolve hostname
+    # 1. Check cache first
+    if [ -f "$STATE_FILE" ]; then
+        hostname=$(jq -r --arg ip "$IP" '.[] | select(.ip==$ip) | .hostname // ""' "$STATE_FILE" 2>/dev/null)
+        if [ ! -z "$hostname" ] && [ "$hostname" != "$IP" ]; then
+            echo "$hostname"
+            return
+        fi
+    fi
+
+    # 2. Try getent (DNS/hosts file)
+    hostname=$(getent hosts "$IP" | awk '{print $2}' | head -n1)
+
+    # 3. Try host command
+    if [ -z "$hostname" ] || [ "$hostname" = "$IP" ]; then
+        hostname=$(host "$IP" 2>/dev/null | awk '/domain name pointer/ {print $5}' | sed 's/\.$//')
+    fi
+
+    # 4. Try nslookup
+    if [ -z "$hostname" ] || [ "$hostname" = "$IP" ]; then
+        hostname=$(nslookup "$IP" 2>/dev/null | awk '/name =/ {print $4}' | sed 's/\.$//' | head -n1)
+    fi
+
+    # 5. Try avahi/mdns for .local hostnames
+    if [ -z "$hostname" ] || [ "$hostname" = "$IP" ]; then
+        if command -v avahi-resolve-address >/dev/null 2>&1; then
+            hostname=$(avahi-resolve-address "$IP" 2>/dev/null | awk '{print $2}')
+        fi
+    fi
+
+    # Fallback to IP if nothing found
     [ -z "$hostname" ] && hostname="$IP"
+
     echo "$hostname"
 }
 
@@ -51,6 +84,9 @@ get_local_mac() {
         }
     '
 }
+
+# State file for caching hostnames and tracking devices
+STATE_FILE="/tmp/network_scanner_state.json"
 
 # ----------------------------
 # Perform full scan
@@ -170,7 +206,6 @@ send_to_trmnl() {
     local PLUGIN_UUID="$2"
 
     BYTE_LIMIT=${BYTE_LIMIT:-2000}
-    STATE_FILE="/tmp/network_scanner_state.json"
     CURRENT_TIMESTAMP=$(date +%s)
 
     CURRENT_MAP='{}'
