@@ -45,9 +45,9 @@ resolve_hostname() {
     fi
 
     # 2. Try getent (DNS/hosts file)
-    hostname=$(getent hosts "$IP" | awk '{print $2}' | head -n1)
+    hostname=$(getent hosts "$IP" 2>/dev/null | awk '{print $2}' | head -n1)
 
-    # 3. Try host command
+    # 3. Try host command (reverse DNS)
     if [ -z "$hostname" ] || [ "$hostname" = "$IP" ]; then
         hostname=$(host "$IP" 2>/dev/null | awk '/domain name pointer/ {print $5}' | sed 's/\.$//')
     fi
@@ -60,12 +60,32 @@ resolve_hostname() {
     # 5. Try avahi/mdns for .local hostnames
     if [ -z "$hostname" ] || [ "$hostname" = "$IP" ]; then
         if command -v avahi-resolve-address >/dev/null 2>&1; then
-            hostname=$(avahi-resolve-address "$IP" 2>/dev/null | awk '{print $2}')
+            hostname=$(timeout 1 avahi-resolve-address "$IP" 2>/dev/null | awk '{print $2}')
         fi
     fi
 
+    # 6. Try NetBIOS name resolution (for Windows devices)
+    if [ -z "$hostname" ] || [ "$hostname" = "$IP" ]; then
+        if command -v nbtscan >/dev/null 2>&1; then
+            hostname=$(timeout 2 nbtscan -q "$IP" 2>/dev/null | awk '{print $2}' | head -n1)
+        fi
+    fi
+
+    # 7. Try nmblookup (alternative NetBIOS)
+    if [ -z "$hostname" ] || [ "$hostname" = "$IP" ]; then
+        if command -v nmblookup >/dev/null 2>&1; then
+            hostname=$(timeout 2 nmblookup -A "$IP" 2>/dev/null | grep '<00>' | grep -v '<GROUP>' | awk '{print $1}' | head -n1)
+        fi
+    fi
+
+    # 8. Extract from nmap's hostname detection if available
+    # This is handled separately in the nmap section
+
     # Fallback to IP if nothing found
     [ -z "$hostname" ] && hostname="$IP"
+
+    # Clean up hostname (remove trailing dots, spaces)
+    hostname=$(echo "$hostname" | sed 's/\.$//' | xargs)
 
     echo "$hostname"
 }
@@ -227,7 +247,8 @@ perform_scan() {
     # ----------------------------
     # 2️⃣ Nmap fallback
     # ----------------------------
-    NMAP_OUTPUT=$(nmap -sn -T4 --max-retries 1 "$NETWORK" 2>/dev/null)
+    # Use -sn for ping scan, -R for reverse DNS, --system-dns for better resolution
+    NMAP_OUTPUT=$(nmap -sn -R --system-dns -T4 --max-retries 1 "$NETWORK" 2>/dev/null)
 
     CURRENT_IP=""
     CURRENT_HOSTNAME=""

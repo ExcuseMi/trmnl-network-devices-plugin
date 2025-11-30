@@ -1,6 +1,6 @@
 FROM alpine:latest
 
-RUN apk add --no-cache bash curl jq nmap iproute2 iputils arp-scan avahi-tools bind-tools
+RUN apk add --no-cache bash curl jq nmap iproute2 iputils arp-scan avahi-tools bind-tools samba-client nbtscan
 
 WORKDIR /app
 
