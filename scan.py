@@ -73,7 +73,16 @@ def lookup_vendor(mac: str) -> str:
                 parts = line.strip().split('\t')
                 if len(parts) >= 2 and parts[0].upper().startswith(oui):
                     # Return long name if available, otherwise short name
-                    return parts[2] if len(parts) >= 3 else parts[1]
+                    vendor = parts[2] if len(parts) >= 3 else parts[1]
+
+                    # Clean up common non-vendor entries
+                    vendor_lower = vendor.lower()
+                    if 'locally administered' in vendor_lower:
+                        return "Virtual/Local"
+                    elif vendor_lower in ['unknown', 'private']:
+                        return "Unknown"
+
+                    return vendor
 
         return "Unknown"
     except Exception as e:
@@ -132,6 +141,12 @@ def detect_device_type(hostname: str, vendor: str) -> str:
     """Detect device type based on hostname and vendor"""
     h = hostname.lower()
     v = vendor.lower()
+
+    # Virtual Machines / Docker / Local
+    if any(x in v for x in ['vmware', 'virtualbox', 'qemu', 'xen', 'parallels', 'virtual', 'local']):
+        return "Virtual Machine"
+    if any(x in h for x in ['vm-', 'docker', 'container', 'virtual']):
+        return "Virtual Machine"
 
     # Routers and Network Equipment
     if any(x in v for x in ['tp-link', 'netgear', 'linksys', 'asus', 'ubiquiti', 'unifi', 'd-link', 'sagemcom']):
