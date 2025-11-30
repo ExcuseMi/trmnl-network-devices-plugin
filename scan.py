@@ -222,7 +222,7 @@ def detect_device_type(hostname: str, vendor: str) -> str:
     if 'locally administered' in v:
         return "Mobile Device"
 
-    return ""
+    return "Network Device"
 
 
 def get_local_mac(ip: str) -> Optional[str]:
@@ -461,6 +461,15 @@ def send_to_trmnl(devices: List[Dict]):
     # Load previous state
     state = load_state()
 
+    log(f"Old state has {len(state)} devices", Colors.BLUE)
+    if state:
+        log("Old state data:", Colors.BLUE)
+        for identifier, data in state.items():
+            last_seen = data.get('last_seen', 0)
+            age_minutes = (current_timestamp - last_seen) // 60
+            log(f"  {identifier}: {data.get('ip')} ({data.get('hostname')}) - last seen {age_minutes}m ago",
+                Colors.BLUE)
+
     # Build current map
     current_map = {}
     devices_list = []
@@ -469,10 +478,15 @@ def send_to_trmnl(devices: List[Dict]):
     for device in devices:
         identifier = device['mac'] or device['ip']
 
+        # Clean vendor: remove "Unknown" and empty it
+        vendor = device['vendor']
+        if vendor and 'unknown' in vendor.lower():
+            vendor = ''
+
         # Don't send hostname if same as IP (save bytes)
         hostname = device['hostname'] if device['hostname'] != device['ip'] else ''
 
-        device_str = f"{device['ip']}|{hostname}|{device['mac']}|{device['vendor']}|{device['type']}|{current_timestamp}"
+        device_str = f"{device['ip']}|{hostname}|{device['mac']}|{vendor}|{device['type']}|{current_timestamp}"
         devices_list.append(device_str)
 
         current_map[identifier] = {
@@ -480,21 +494,30 @@ def send_to_trmnl(devices: List[Dict]):
             'ip': device['ip'],
             'hostname': device['hostname'],
             'mac': device['mac'],
-            'vendor': device['vendor'],
+            'vendor': vendor,
             'type': device['type']
         }
 
     # Add offline devices (seen in last 24h)
+    offline_count = 0
     for identifier, data in state.items():
         last_seen = data.get('last_seen', 0)
 
         if identifier not in current_map and last_seen > cutoff:
+            offline_count += 1
             hostname = data.get('hostname', '')
             if hostname == data.get('ip'):
                 hostname = ''
 
-            device_str = f"{data.get('ip')}|{hostname}|{data.get('mac')}|{data.get('vendor')}|{data.get('type', 'Network Device')}|{last_seen}"
+            # Clean vendor from old state too
+            vendor = data.get('vendor', '')
+            if vendor and 'unknown' in vendor.lower():
+                vendor = ''
+
+            device_str = f"{data.get('ip')}|{hostname}|{data.get('mac')}|{vendor}|{data.get('type', 'Network Device')}|{last_seen}"
             devices_list.append(device_str)
+
+    log(f"Added {offline_count} offline devices from state", Colors.YELLOW if offline_count > 0 else Colors.BLUE)
 
     # Save current state
     save_state(current_map)
@@ -512,6 +535,11 @@ def send_to_trmnl(devices: List[Dict]):
     payload_size = len(payload_json)
 
     log(f"Sending to TRMNL... (size: {payload_size} bytes, devices: {len(devices_list)})", Colors.BLUE)
+    log("Payload preview (first 3 devices):", Colors.BLUE)
+    for i, device_str in enumerate(devices_list[:3]):
+        log(f"  [{i + 1}] {device_str}", Colors.BLUE)
+    if len(devices_list) > 3:
+        log(f"  ... and {len(devices_list) - 3} more devices", Colors.BLUE)
 
     # Truncate if too large
     if payload_size > BYTE_LIMIT:
@@ -520,6 +548,8 @@ def send_to_trmnl(devices: List[Dict]):
         # Separate online and offline
         online = [d for d in devices_list if int(d.split('|')[-1]) >= current_timestamp - 600]
         offline = [d for d in devices_list if int(d.split('|')[-1]) < current_timestamp - 600]
+
+        log(f"Online devices: {len(online)}, Offline devices: {len(offline)}", Colors.YELLOW)
 
         # Add devices until we hit limit
         truncated = []
@@ -546,6 +576,10 @@ def send_to_trmnl(devices: List[Dict]):
         payload_json = json.dumps(payload)
         log(f"Truncated to {len(truncated)} devices ({len(payload_json)} bytes)", Colors.YELLOW)
 
+    # Log final payload
+    log("Final payload:", Colors.GREEN)
+    log(payload_json[:500] + "..." if len(payload_json) > 500 else payload_json, Colors.GREEN)
+
     # Send to webhook
     try:
         webhook_url = f"https://usetrmnl.com/api/custom_plugins/{PLUGIN_UUID}"
@@ -557,6 +591,7 @@ def send_to_trmnl(devices: List[Dict]):
             log("⚠ Rate limited (429)", Colors.YELLOW)
         else:
             log(f"✗ Error sending to TRMNL (HTTP {response.status_code})", Colors.RED)
+            log(f"Response: {response.text}", Colors.RED)
     except Exception as e:
         log(f"Error sending to TRMNL: {e}", Colors.RED)
 
