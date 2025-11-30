@@ -345,7 +345,7 @@ send_to_trmnl() {
     DEVICES_ARRAY='[]'
 
     # ----------------------------
-    # Add current scan devices
+    # Add current online devices
     # ----------------------------
     while IFS= read -r device; do
         IP=$(echo "$device" | jq -r '.ip')
@@ -355,19 +355,17 @@ send_to_trmnl() {
         TYPE=$(echo "$device" | jq -r '.type // "Network Device"')
 
         IDENTIFIER="${MAC:-$IP}"
-
         [ "$HOSTNAME" = "$IP" ] && HOSTNAME=""
 
-        # Skip offline entries with no identifier
-        if [ -n "$P_IP" ] || [ -n "$P_MAC" ]; then
-            DEVICE_STR="$P_IP|$P_HN|$P_MAC|$P_VEND|$P_TYPE|$TS"
-            DEVICES_ARRAY=$(echo "$DEVICES_ARRAY" | jq --arg d "$DEVICE_STR" '. += [$d]')
-            CURRENT_MAP=$(echo "$CURRENT_MAP" | jq --arg id "$ID" \
-                --arg ts "$TS" \
-                --arg ip "$P_IP" --arg hostname "$P_HN" \
-                --arg mac "$P_MAC" --arg vendor "$P_VEND" --arg type "$P_TYPE" \
-                '. + {($id): {last_seen: $ts, ip: $ip, hostname: $hostname, mac: $mac, vendor: $vendor, type: $type}}')
-        fi
+        DEVICE_STR="$IP|$HOSTNAME|$MAC|$VENDOR|$TYPE|$CURRENT_TIMESTAMP|online"
+        DEVICES_ARRAY=$(echo "$DEVICES_ARRAY" | jq --arg d "$DEVICE_STR" '. += [$d]')
+
+        CURRENT_MAP=$(echo "$CURRENT_MAP" | jq --arg id "$IDENTIFIER" \
+            --arg ts "$CURRENT_TIMESTAMP" \
+            --arg ip "$IP" --arg hostname "$HOSTNAME" \
+            --arg mac "$MAC" --arg vendor "$VENDOR" --arg type "$TYPE" \
+            --arg status "online" \
+            '. + {($id): {last_seen: $ts, ip: $ip, hostname: $hostname, mac: $mac, vendor: $vendor, type: $type, status: $status}}')
     done < <(echo "$DEVICES" | jq -c '.[]')
 
     # ----------------------------
@@ -382,34 +380,34 @@ send_to_trmnl() {
 
             ID=$(_jq '.key')
             TS=$(_jq '.value.last_seen')
+            IP=$(_jq '.value.ip')
+            HOSTNAME=$(_jq '.value.hostname')
+            MAC=$(_jq '.value.mac')
+            VENDOR=$(_jq '.value.vendor')
+            TYPE=$(_jq '.value.type // "Network Device"')
 
-            # Skip if device is in current scan
+            [ "$HOSTNAME" = "$IP" ] && HOSTNAME=""
+
+            # Skip if already in current scan or missing identifier
             IN_CURRENT=$(echo "$CURRENT_MAP" | jq --arg id "$ID" 'has($id)')
-            if [ "$IN_CURRENT" = "true" ]; then
+            if [ "$IN_CURRENT" = "true" ] || ([ -z "$IP" ] && [ -z "$MAC" ]); then
                 continue
             fi
 
-            # Only keep devices seen within retention window
+            # Skip if last seen outside cutoff
             if [ "$TS" -le "$CUTOFF" ]; then
                 continue
             fi
 
-            P_IP=$(_jq '.value.ip')
-            P_HN=$(_jq '.value.hostname')
-            P_MAC=$(_jq '.value.mac')
-            P_VEND=$(_jq '.value.vendor')
-            P_TYPE=$(_jq '.value.type // "Network Device"')
-
-            [ "$P_HN" = "$P_IP" ] && P_HN=""
-
-            DEVICE_STR="$P_IP|$P_HN|$P_MAC|$P_VEND|$P_TYPE|$TS"
+            DEVICE_STR="$IP|$HOSTNAME|$MAC|$VENDOR|$TYPE|$TS|offline"
             DEVICES_ARRAY=$(echo "$DEVICES_ARRAY" | jq --arg d "$DEVICE_STR" '. += [$d]')
 
             CURRENT_MAP=$(echo "$CURRENT_MAP" | jq --arg id "$ID" \
                 --arg ts "$TS" \
-                --arg ip "$P_IP" --arg hostname "$P_HN" \
-                --arg mac "$P_MAC" --arg vendor "$P_VEND" --arg type "$P_TYPE" \
-                '. + {($id): {last_seen: $ts, ip: $ip, hostname: $hostname, mac: $mac, vendor: $vendor, type: $type}}')
+                --arg ip "$IP" --arg hostname "$HOSTNAME" \
+                --arg mac "$MAC" --arg vendor "$VENDOR" --arg type "$TYPE" \
+                --arg status "offline" \
+                '. + {($id): {last_seen: $ts, ip: $ip, hostname: $hostname, mac: $mac, vendor: $vendor, type: $type, status: $status}}')
         done
     fi
 
@@ -432,17 +430,8 @@ send_to_trmnl() {
     if [ "$PAYLOAD_SIZE" -gt "$BYTE_LIMIT" ]; then
         log "${RED}WARNING: Payload ${PAYLOAD_SIZE} exceeds ${BYTE_LIMIT} bytes, truncating...${NC}"
 
-        ONLINE_ARRAY='[]'
-        OFFLINE_ARRAY='[]'
-
-        for d in $(echo "$DEVICES_ARRAY" | jq -r '.[]'); do
-            TS=$(echo "$d" | cut -d'|' -f6)
-            if (( CURRENT_TIMESTAMP - TS < 600 )); then
-                ONLINE_ARRAY=$(echo "$ONLINE_ARRAY" | jq --arg d "$d" '. += [$d]')
-            else
-                OFFLINE_ARRAY=$(echo "$OFFLINE_ARRAY" | jq --arg d "$d" '. += [$d]')
-            fi
-        done
+        ONLINE_ARRAY=$(echo "$DEVICES_ARRAY" | jq '[.[] | select(endswith("|online"))]')
+        OFFLINE_ARRAY=$(echo "$DEVICES_ARRAY" | jq '[.[] | select(endswith("|offline"))]')
 
         TRUNCATED_ARRAY='[]'
 
