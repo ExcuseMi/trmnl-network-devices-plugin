@@ -335,28 +335,37 @@ perform_scan() {
 # Send data to TRMNL
 # ----------------------------
 send_to_trmnl() {
-    DEVICES_JSON="[]"
+    local DEVICES_JSON="[]"
+    local EPOCH
+    local FINAL_COUNT
+    local RAW_BYTES
+    local TRUNCATED_JSON
+    local BYTE_LIMIT=${BYTE_LIMIT:-2000}
 
     echo "[INFO] Preparing payload for TRMNL..."
 
     # Require PLUGIN_UUID
     if [ -z "$2" ]; then
         echo "[ERROR] PLUGIN_UUID is not set; aborting"
-        return
+        return 1
     fi
-    PLUGIN_UUID="$2"
+    local PLUGIN_UUID="$2"
 
     # Ensure state file exists
     if [ ! -f "$STATE_FILE" ]; then
         echo "{}" > "$STATE_FILE"
     fi
-
+    local CURRENT_STATE
     CURRENT_STATE=$(cat "$STATE_FILE")
 
     echo "[INFO] Adding online devices from scan..."
 
     # Add online devices from JSON input ($1)
     while IFS= read -r device; do
+        local IP
+        local MAC
+        local VENDOR
+        local HOST
         IP=$(echo "$device" | jq -r '.ip')
         MAC=$(echo "$device" | jq -r '.mac // ""')
         VENDOR=$(echo "$device" | jq -r '.vendor // ""')
@@ -372,7 +381,8 @@ send_to_trmnl() {
 
     echo "[INFO] Checking for offline devices..."
 
-    # Add offline devices from previous state that were seen recently
+    # Add offline devices from previous state if they exist
+    local OFFLINE_JSON
     OFFLINE_JSON=$(echo "$CURRENT_STATE" | jq -r '.devices // [] | map(select(.online == 0))')
 
     if [ "$OFFLINE_JSON" != "[]" ]; then
@@ -382,32 +392,70 @@ send_to_trmnl() {
     FINAL_COUNT=$(echo "$DEVICES_JSON" | jq 'length')
     echo "[INFO] Final device count: $FINAL_COUNT"
 
-    # Safe epoch timestamp
+    # Epoch timestamp
     EPOCH=$(busybox date +%s)
 
-    # Build payload
-    PAYLOAD=$(jq -n \
-        --argjson devices "$DEVICES_JSON" \
-        --arg epoch "$EPOCH" \
-        '{devices: $devices, timestamp: ($epoch|tonumber)}')
+    # -------------------------
+    # Truncate payload to BYTE_LIMIT
+    # -------------------------
+    TRUNCATED_JSON="[]"
+
+    # Separate online/offline devices
+    local ONLINE_JSON
+    ONLINE_JSON=$(echo "$DEVICES_JSON" | jq '[.[] | select(.online==1)]')
+    OFFLINE_JSON=$(echo "$DEVICES_JSON" | jq '[.[] | select(.online==0)]')
+
+    # Add online devices first
+    for dev in $(echo "$ONLINE_JSON" | jq -c '.[]'); do
+        local TEST_JSON
+        TEST_JSON=$(echo "$TRUNCATED_JSON" | jq --argjson d "$dev" '. += [$d]')
+        local TEST_PAYLOAD
+        TEST_PAYLOAD=$(jq -n --argjson devices "$TEST_JSON" --arg epoch "$EPOCH" '{devices:$devices,timestamp:($epoch|tonumber)}')
+        if [ $(printf "%s" "$TEST_PAYLOAD" | wc -c) -le $BYTE_LIMIT ]; then
+            TRUNCATED_JSON="$TEST_JSON"
+        else
+            break
+        fi
+    done
+
+    # Add offline devices if space permits
+    for dev in $(echo "$OFFLINE_JSON" | jq -c '.[]'); do
+        local TEST_JSON
+        TEST_JSON=$(echo "$TRUNCATED_JSON" | jq --argjson d "$dev" '. += [$d]')
+        local TEST_PAYLOAD
+        TEST_PAYLOAD=$(jq -n --argjson devices "$TEST_JSON" --arg epoch "$EPOCH" '{devices:$devices,timestamp:($epoch|tonumber)}')
+        if [ $(printf "%s" "$TEST_PAYLOAD" | wc -c) -le $BYTE_LIMIT ]; then
+            TRUNCATED_JSON="$TEST_JSON"
+        else
+            break
+        fi
+    done
+
+    # Build final payload
+    local PAYLOAD
+    PAYLOAD=$(jq -n --argjson devices "$TRUNCATED_JSON" --arg epoch "$EPOCH" '{devices:$devices,timestamp:($epoch|tonumber)}')
 
     RAW_BYTES=$(printf "%s" "$PAYLOAD" | wc -c)
     echo "[INFO] Payload raw size: $RAW_BYTES bytes"
 
-    # Original webhook logic
+    # -------------------------
+    # Send payload to TRMNL
+    # -------------------------
+    local WEBHOOK_URL
     WEBHOOK_URL="https://usetrmnl.com/api/custom_plugins/$PLUGIN_UUID"
 
     echo "[INFO] Sending raw JSON payload to TRMNL..."
 
+    local RESPONSE
     RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$WEBHOOK_URL" \
         -H "Content-Type: application/json" \
         -d "$PAYLOAD")
 
+    local HTTP_CODE
     HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-
     echo "[INFO] TRMNL HTTP response: $HTTP_CODE"
 
-    # Update state file
+    # Update state file with truncated payload
     echo "$PAYLOAD" > "$STATE_FILE"
     echo "[INFO] State file updated."
 }
