@@ -176,7 +176,7 @@ send_to_trmnl() {
     CURRENT_MAP='{}'
     DEVICES_ARRAY='[]'
 
-    # Build current list
+    # Build current list with current timestamp
     while IFS= read -r device; do
         IP=$(echo "$device" | jq -r '.ip')
         HOSTNAME=$(echo "$device" | jq -r '.hostname')
@@ -185,7 +185,8 @@ send_to_trmnl() {
 
         IDENTIFIER="${MAC:-$IP}"
 
-        DEVICE_STR="$IP|$HOSTNAME|$MAC|$VENDOR|1"
+        # Send actual timestamp instead of 1
+        DEVICE_STR="$IP|$HOSTNAME|$MAC|$VENDOR|$CURRENT_TIMESTAMP"
         DEVICES_ARRAY=$(echo "$DEVICES_ARRAY" | jq --arg d "$DEVICE_STR" '. += [$d]')
 
         CURRENT_MAP=$(echo "$CURRENT_MAP" | jq --arg id "$IDENTIFIER" \
@@ -196,7 +197,7 @@ send_to_trmnl() {
 
     done < <(echo "$DEVICES" | jq -c '.[]')
 
-    # Merge offline devices
+    # Merge offline devices with their last seen timestamp
     if [ -f "$STATE_FILE" ]; then
         PREV=$(cat "$STATE_FILE")
         CUTOFF=$((CURRENT_TIMESTAMP - 86400)) # 24h
@@ -212,7 +213,8 @@ send_to_trmnl() {
                 P_MAC=$(echo "$entry" | jq -r '.value.mac')
                 P_VEND=$(echo "$entry" | jq -r '.value.vendor')
 
-                DEVICE_STR="$P_IP|$P_HN|$P_MAC|$P_VEND|0"
+                # Send the old timestamp (when it was last seen)
+                DEVICE_STR="$P_IP|$P_HN|$P_MAC|$P_VEND|$TS"
                 DEVICES_ARRAY=$(echo "$DEVICES_ARRAY" | jq --arg d "$DEVICE_STR" '. += [$d]')
             fi
         done
