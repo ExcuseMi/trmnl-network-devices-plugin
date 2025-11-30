@@ -222,7 +222,7 @@ def detect_device_type(hostname: str, vendor: str) -> str:
     if 'locally administered' in v:
         return "Mobile Device"
 
-    return "Network Device"
+    return ""
 
 
 def get_local_mac(ip: str) -> Optional[str]:
