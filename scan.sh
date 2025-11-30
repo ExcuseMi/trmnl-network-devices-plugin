@@ -376,7 +376,8 @@ send_to_trmnl() {
         PREV=$(cat "$STATE_FILE")
         CUTOFF=$((CURRENT_TIMESTAMP - 86400)) # 24h
 
-        echo "$PREV" | jq -r 'to_entries | .[] | @json' | while read -r entry; do
+        # Process entries without using a pipe (to avoid subshell)
+        while read -r entry; do
             ID=$(echo "$entry" | jq -r '.key')
             TS=$(echo "$entry" | jq -r '.value.last_seen')
 
@@ -397,9 +398,8 @@ send_to_trmnl() {
                 DEVICE_STR="$P_IP|$P_HN|$P_MAC|$P_VEND|$P_TYPE|$TS"
                 DEVICES_ARRAY=$(echo "$DEVICES_ARRAY" | jq --arg d "$DEVICE_STR" '. += [$d]')
             fi
-        done
+        done < <(echo "$PREV" | jq -r 'to_entries | .[] | @json')
     fi
-
     echo "$CURRENT_MAP" > "$STATE_FILE"
 
     TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
