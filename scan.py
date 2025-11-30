@@ -77,9 +77,7 @@ def lookup_vendor(mac: str) -> str:
 
                     # Clean up common non-vendor entries
                     vendor_lower = vendor.lower()
-                    if 'locally administered' in vendor_lower:
-                        return "Virtual/Local"
-                    elif vendor_lower in ['unknown', 'private']:
+                    if vendor_lower in ['unknown', 'private']:
                         return "Unknown"
 
                     return vendor
@@ -142,11 +140,12 @@ def detect_device_type(hostname: str, vendor: str) -> str:
     h = hostname.lower()
     v = vendor.lower()
 
-    # Virtual Machines / Docker / Local
-    if any(x in v for x in ['vmware', 'virtualbox', 'qemu', 'xen', 'parallels', 'virtual', 'local']):
-        return "Virtual Machine"
-    if any(x in h for x in ['vm-', 'docker', 'container', 'virtual']):
-        return "Virtual Machine"
+    # Check for Android/iOS device patterns first (before checking vendor)
+    # These devices often use MAC randomization, so vendor might be "locally administered"
+    if any(x in h for x in
+           ['android', 'phone', 'mobile', 'tablet', 'ipad', 'iphone', 'galaxy', 'pixel', 'oneplus', 'xiaomi', 'oppo',
+            'vivo', 'realme', 'samsung-', 'huawei']):
+        return "Mobile Device"
 
     # Routers and Network Equipment
     if any(x in v for x in ['tp-link', 'netgear', 'linksys', 'asus', 'ubiquiti', 'unifi', 'd-link', 'sagemcom']):
@@ -198,10 +197,6 @@ def detect_device_type(hostname: str, vendor: str) -> str:
     if any(x in h for x in ['playstation', 'xbox', 'ps4', 'ps5', 'switch', 'steamdeck']):
         return "Gaming Console"
 
-    # Mobile
-    if any(x in h for x in ['phone', 'mobile', 'tablet', 'ipad']):
-        return "Mobile Device"
-
     # TV/Streaming
     if any(x in v for x in ['roku', 'nvidia', 'lg', 'vizio']):
         return "TV/Streaming"
@@ -215,6 +210,17 @@ def detect_device_type(hostname: str, vendor: str) -> str:
     # NAS
     if any(x in h for x in ['nas', 'storage', 'synology', 'qnap']):
         return "NAS"
+
+    # Virtual Machines / Docker (check last, after all real devices)
+    if any(x in v for x in ['vmware', 'virtualbox', 'qemu', 'xen', 'parallels']):
+        return "Virtual Machine"
+    if any(x in h for x in ['vm-', 'docker', 'container', 'virtual']):
+        return "Virtual Machine"
+
+    # If vendor is "locally administered" and we haven't matched anything else,
+    # it's probably a mobile device with MAC randomization
+    if 'locally administered' in v:
+        return "Mobile Device"
 
     return "Network Device"
 
