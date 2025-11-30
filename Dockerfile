@@ -1,13 +1,7 @@
 FROM alpine:latest
 
-RUN apk add --no-cache \
-    nmap \
-    bash \
-    curl \
-    jq \
-    iproute2 \
-    arping \
-    bind-tools
+# Install tools
+RUN apk add --no-cache nmap bash curl jq iproute2 iputils
 
 WORKDIR /app
 
