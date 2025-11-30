@@ -1,7 +1,7 @@
 FROM alpine:latest
 
 # Install nmap, curl, jq and other utilities
-RUN apk add --no-cache nmap bash curl jq arp-scan
+RUN apk add --no-cache nmap bash curl jq
 
 # Create a directory for scripts
 WORKDIR /app
