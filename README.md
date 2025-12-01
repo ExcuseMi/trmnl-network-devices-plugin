@@ -29,13 +29,6 @@ PLUGIN_UUID=your_plugin_uuid_here
 INTERVAL=15        # Scan every 15 minutes
 BYTE_LIMIT=2000    # 2000 for free, 5000 for TRMNL+
 ```
-
-## Troubleshooting
-
-**No devices showing?**
-```bash
-docker-compose logs -f network-scanner
-```
                                 
 ## Updating
 
@@ -46,7 +39,64 @@ docker-compose down
 docker-compose build --no-cache
 docker-compose up -d
 ```
+## How It Works
 
+The network scanner uses two complementary methods to discover devices:
+
+1. **ARP Scan** - Fast layer-2 discovery that finds devices on your local subnet by sending ARP requests
+2. **Nmap Scan** - Layer-3 ping scan that can find devices that don't respond to ARP
+
+Once devices are found, the scanner:
+- Resolves hostnames using DNS, mDNS (Avahi), and NetBIOS
+- Looks up vendor information from MAC addresses using the Wireshark OUI database
+- Detects device types based on hostname patterns and vendor names
+- Tracks online/offline status by comparing timestamps between scans
+
+## Troubleshooting
+
+### Why a Device Might Not Show Up
+
+#### 1. Device is not on the same subnet
+- **Cause:** The scanner only finds devices on the same network segment
+- **Check:** Is the device on a different VLAN, guest network, or subnet?
+- **Solution:** Run the scanner on each network segment, or adjust your `NETWORK` environment variable
+
+#### 2. Device has network isolation enabled
+- **Cause:** Some IoT devices, guest networks, or AP isolation features prevent device discovery
+- **Check:** Can you ping the device from the scanner host? `ping 192.168.1.x`
+- **Solution:** Disable AP/client isolation in your router settings, or manually add the device via IP in TRMNL Device Configuration
+
+#### 3. Device doesn't respond to ARP or ping
+- **Cause:** Some devices intentionally hide from network scans (stealth mode), or firewalls block ICMP/ARP
+- **Check:** Try scanning manually:
+  ```bash
+  docker exec network-scanner arp-scan --interface=eth0 --localnet
+  docker exec network-scanner nmap -sn 192.168.1.0/24
+  ```
+- **Solution:** These devices can't be auto-discovered; add them manually in TRMNL Device Configuration if you know their IP
+
+#### 4. Scanner container networking issues
+- **Cause:** Container must run in `host` network mode to see local devices, and needs `privileged: true` for raw socket access
+- **Check:** Verify docker-compose.yml has both settings:
+  ```bash
+  docker inspect network-scanner | grep -A5 NetworkMode
+  docker inspect network-scanner | grep Privileged
+  ```
+- **Solution:** Ensure your docker-compose.yml contains:
+  ```yaml
+  network_mode: host
+  privileged: true
+  ```
+
+#### 5. Hostname resolution fails
+- **Cause:** Devices show as IP addresses instead of friendly names (common with mobile devices using MAC randomization)
+- **Check:** Does the device have a hostname configured? Does it broadcast via mDNS?
+- **Solution:** Use Device Configuration in TRMNL plugin settings to set custom names
+
+#### 6. Device is filtered or rate-limited
+- **Cause:** Router/firewall may rate-limit or block scanning activity
+- **Check:** Look for "host unreachable" or timeout errors in logs
+- **Solution:** Increase `INTERVAL` between scans, or whitelist the scanner in your firewall
 ## License
 
 MIT

@@ -15,6 +15,9 @@
       top:0;
       bottom:auto;
     }
+    .nobg {
+      background: none;
+    }
     </style>
 {% liquid
 assign owner_user_id = 6458
@@ -23,6 +26,8 @@ assign default_map_array = default_mappings | split: "|"
 
 assign device_identifiers = trmnl.plugin_settings.custom_fields_values.device_identifiers
 assign show_mac_addresses = trmnl.plugin_settings.custom_fields_values.show_mac_addresses | downcase
+assign show_offline_devices = trmnl.plugin_settings.custom_fields_values.show_offline_devices | default: "yes" 
+
 assign offline_threshold = trmnl.plugin_settings.custom_fields_values.offline_threshold | default: 10
 assign offline_seconds = offline_threshold | plus: 0 | times: 60
 if trmnl.user.id == owner_user_id
@@ -50,7 +55,9 @@ endif
     {% assign time_diff = current_time | minus: last_seen_num %}
 
     {% if time_diff > offline_seconds %}
+    {% if show_offline_devices == "yes" %}
     {% assign offline_devices = offline_devices | append: device_line | append: "~~~" %}
+    {% endif %}
     {% else %}
     {% assign online_devices = online_devices | append: device_line | append: "~~~" %}
     {% endif %}
@@ -179,18 +186,29 @@ endif
           {% endif %}
           {% endfor %}
           {% endif %}
+          {% if show_headers and show_offline_devices == 'no' %}
+          {% assign show_headers = false %}
+          {% endif %}
+          {% if show_headers %}
+          {% unless is_offline %}
+          {% if forloop.index0 == 0 %}  
+          <span class="label label--medium group-header" data-group-header="true">ONLINE</span>       
+          {% endif %}
+          {% endunless %}
           {% assign first_offline = false %}
           {% if is_offline and online_devices_count > 0 %}
           {% unless has_offlines %}
-           <div class="item divider"></div>
+          <span class="label label--medium group-header" data-group-header="true">OFFLINE</span>       
           {% endunless %}
           {% endif %}
-          <div class="item item--emphasis-{% if is_offline %}1{% else %}{{ forloop.index0 | modulo: 2 | plus: 2}}{% endif %}">
-            <div class="meta w--8">
-              {% if is_offline %}
+          {% endif %}
+          <div class="item item--emphasis-{% if is_offline %}1{% else %}{{ forloop.index0 | modulo: 3 | plus: 1}}{% endif %}">
+
+            <div class="meta w--8 {% if is_offline %}nobg{% endif %}">
+              {% if show_headers == false and is_offline %}
               <div class="image image-stroke material-symbols-outlined offline-device {{offline_gray}}">signal_disconnected</div>
               {% else %}
-              <div class="image image-dither image-stroke material-symbols-outlined">{{ matched_icon }}</div>
+              <div class="image image-dither image-stroke material-symbols-outlined {% if is_offline %} offline-device {{offline_gray}}{% endif %}">{{ matched_icon }}</div>
               {% endif %}
             </div>
 
@@ -257,7 +275,7 @@ endif
     <span class="label">{{online_devices_count}}</span>
     {% endif %}
     {% if offline_devices_count > 0 %}
-    <span class="image image-stroke material-symbols-outlined mb--1">android_wifi_3_bar_off</span>
+    <span class="image image-stroke material-symbols-outlined mb--1">signal_disconnected</span>
     <span class="label">{{offline_devices_count}}</span>
     {% endif %}
 </div>
