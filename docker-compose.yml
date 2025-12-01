@@ -14,9 +14,3 @@ services:
 
     env_file:
       - .env
-
-    environment:
-      PLUGIN_UUID: ${PLUGIN_UUID}
-      INTERVAL: ${INTERVAL}
-      BYTE_LIMIT: ${BYTE_LIMIT}
-      NETWORK: ${NETWORK}

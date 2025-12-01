@@ -20,6 +20,7 @@ BYTE_LIMIT = int(os.getenv("BYTE_LIMIT", "2000"))
 PLUGIN_UUID = os.getenv("PLUGIN_UUID", "")
 INTERVAL = int(os.getenv("INTERVAL", "15"))
 NETWORK = os.getenv("NETWORK", "")
+OFFLINE_RETENTION = int(os.getenv("OFFLINE_RETENTION", "1440"))  # Default 24 hours in minutes
 
 
 class Colors:
@@ -456,7 +457,7 @@ def send_to_trmnl(devices: List[Dict]):
         return
 
     current_timestamp = int(time.time())
-    cutoff = current_timestamp - 86400  # 24 hours
+    cutoff = current_timestamp - (OFFLINE_RETENTION * 60)  # Convert minutes to seconds
 
     # Load previous state
     state = load_state()
@@ -523,8 +524,30 @@ def send_to_trmnl(devices: List[Dict]):
 
     log(f"Added {offline_count} offline devices from state", Colors.YELLOW if offline_count > 0 else Colors.BLUE)
 
-    # Save current state
-    save_state(current_map)
+    # Save current state - MERGE with old state to preserve offline devices
+    log(f"Merging current scan ({len(current_map)} devices) with old state ({len(state)} devices)", Colors.BLUE)
+
+    # Start with old state
+    merged_state = state.copy()
+
+    # Update with current devices (this updates last_seen for online devices)
+    merged_state.update(current_map)
+
+    # Remove devices older than OFFLINE_RETENTION
+    cutoff_time = current_timestamp - (OFFLINE_RETENTION * 60)
+    devices_to_remove = []
+    for identifier, data in merged_state.items():
+        if data.get('last_seen', 0) < cutoff_time:
+            devices_to_remove.append(identifier)
+
+    for identifier in devices_to_remove:
+        age_hours = (current_timestamp - merged_state[identifier].get('last_seen', 0)) / 3600
+        log(f"Removing device {identifier} ({merged_state[identifier].get('ip')}) - last seen {age_hours:.1f}h ago (> {OFFLINE_RETENTION}m retention)",
+            Colors.RED)
+        del merged_state[identifier]
+
+    log(f"Saving merged state with {len(merged_state)} total devices", Colors.GREEN)
+    save_state(merged_state)
 
     # Build payload
     timestamp = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
