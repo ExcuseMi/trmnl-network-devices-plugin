@@ -8,7 +8,7 @@ import subprocess
 import re
 import socket
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -550,7 +550,7 @@ def send_to_trmnl(devices: List[Dict]):
     save_state(merged_state)
 
     # Build payload
-    timestamp = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    timestamp = datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
     payload = {
         'merge_variables': {
             'devices_list': devices_list,
