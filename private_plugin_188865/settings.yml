@@ -1,0 +1,44 @@
+---
+strategy: webhook
+no_screen_padding: 'no'
+dark_mode: 'no'
+static_data: ''
+polling_verb: get
+polling_url: ''
+polling_headers: ''
+polling_body: ''
+id: 188865
+custom_fields:
+- keyname: author_info
+  name: About This Plugin
+  field_type: author_bio
+  description: Keep tabs on every device connected to your home or office network with automatic discovery, smart categorization, and real-time status tracking. Network Devices scans your local network, identifies devices by vendor and type, and displays them with intuitive icons on your TRMNL.<br /><br />Features:<br />• Automatic device detection via arp-scan and nmap<br />• Smart vendor identification from MAC addresses<br />• Offline tracking - see when devices disconnect<br />• Customizable names, icons, and device types<br />• Clean, modern interface with Material Symbols icons<br /><br />Requires a Docker container running on your network (5 min setup). Perfect for monitoring IoT devices, tracking network usage, or keeping an eye on who's connected.
+  github_url: https://github.com/ExcuseMi/trmnl-network-devices-plugin
+- keyname: device_identifiers
+  field_type: multi_string
+  name: Device Configuration
+  description: Customize device names, vendors, types, icons, or hide specific devices
+  placeholder: MAC=AA:BB:CC:DD:EE:FF;name=Living Room Pi;type=Raspberry Pi;icon=memory
+  help_text: <strong>Format:</strong> <code>MAC=xx:xx:xx:xx:xx:xx;name=Device Name;vendor=Vendor;type=Type;icon=icon_name;hide=true</code><br /><br /> <strong>All fields are optional.</strong> Use semicolons (;) to separate fields.<br /><br /> <strong>Examples:</strong><br /> • <code>MAC=AA:BB:CC:DD:EE:FF;name=Security Camera;icon=videocam</code><br /> • <code>IP=192.168.1.10;name=Pi-hole;type=Raspberry Pi;icon=memory</code><br /> • <code>MAC=11:22:33:44:55:66;hide=true</code> (hide device)<br /> • <code>MAC=99:88:77:66:55:44;vendor=;type=</code> (clear auto-detected info)<br /><br /> <strong>Field Reference:</strong><br /> • <strong>MAC/IP:</strong> Device identifier (MAC preferred, use IP if MAC changes)<br /> • <strong>name:</strong> Display name for the device<br /> • <strong>vendor:</strong> Manufacturer (shown in parentheses after type)<br /> • <strong>type:</strong> Device category (e.g., "Smart Speaker", "Camera")<br /> • <strong>icon:</strong> Custom icon name from Material Symbols (see below)<br /> • <strong>hide:</strong> Set to "true" to hide device from display<br /><br /> <strong>Common Icons:</strong><br /> <code>router</code>, <code>phone_iphone</code>, <code>tablet_mac</code>, <code>laptop_mac</code>, <code>computer</code>, <code>tv</code>, <code>speaker</code>, <code>print</code>, <code>videocam</code>, <code>lightbulb</code>, <code>thermostat</code>, <code>doorbell</code>, <code>memory</code> (Raspberry Pi), <code>nest_remote</code>, <code>cast</code>, <code>smartphone</code>, <code>headphones</code>, <code>sports_esports</code>, <code>videogame_asset</code>, <code>storage</code>, <code>power</code><br /> <a href="https://fonts.google.com/icons" target="_blank" class="underline">Browse all 2,500+ Material Symbols icons</a>
+  optional: true
+- keyname: offline_threshold
+  field_type: number
+  name: Offline Threshold (minutes)
+  description: How long before a device is marked as offline and shown with reduced opacity
+  default: '10'
+  min: 1
+  max: 1440
+  help_text: Devices not seen in the last scan will be marked offline after this many minutes. Default is 10 minutes. Offline devices remain visible for 24 hours before being removed.
+  optional: true
+- keyname: show_mac_addresses
+  field_type: select
+  name: Show MAC Addresses
+  description: Display MAC addresses below each device
+  options:
+  - Yes - Show MAC addresses: 'yes'
+  - No - Hide MAC addresses: 'no'
+  default: 'no'
+  help_text: Useful for identifying devices to configure in Device Configuration above. MAC addresses appear as a third line below the device name and type.
+  optional: true
+name: Network Devices
+refresh_interval: 60

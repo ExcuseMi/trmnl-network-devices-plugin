@@ -1,0 +1,9 @@
+{% assign max_columns = 4 %}
+{% render "devices", 
+max_columns:max_columns, 
+devices_list: devices_list, 
+device_identifiers:device_identifiers, 
+default_map_array:default_map_array, 
+show_mac_addresses:show_mac_addresses,
+offline_seconds:offline_seconds
+%}

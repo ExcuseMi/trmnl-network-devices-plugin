@@ -1,0 +1,241 @@
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200">
+
+<style>
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 600, 'GRAD' 0, 'opsz' 26;
+  }
+  .offline-device {
+    opacity: 0.6;
+  }
+
+</style>
+{% liquid
+assign owner_user_id = 6458
+# Material Symbols icon mappings
+assign default_mappings = "memory=raspberry;pi|phone_iphone=apple;iphone|tablet_mac=ipad|laptop_mac=macbook;imac|headphones=airpod|nest_remote=google;nest|cast=chromecast|smartphone=samsung;galaxy;phone;mobile;android|speaker=sonos;audio|router=tp-link;tplink;netgear;linksys;asus;d-link;gateway;modem;ubiquiti;unifi|print=brother;hp;epson;canon;printer|lightbulb=hue;light;bulb|smart_toy=amazon;echo;alexa|sports_esports=microsoft;xbox|videogame_asset=sony;playstation;ps4;ps5;nintendo;switch|tv=nvidia;shield;roku|power=tuya;smart;plug|settings_input_hdmi=switch|storage=nas|videocam=camera;cam|thermostat=thermostat|doorbell=doorbell|tablet=tablet|laptop=laptop|computer=desktop;pc|watch=watch"
+assign default_map_array = default_mappings | split: "|"
+
+assign device_identifiers = trmnl.plugin_settings.custom_fields_values.device_identifiers
+assign show_mac_addresses = trmnl.plugin_settings.custom_fields_values.show_mac_addresses | downcase
+assign offline_threshold = trmnl.plugin_settings.custom_fields_values.offline_threshold | default: 10
+assign offline_seconds = offline_threshold | plus: 0 | times: 60
+if trmnl.user.id == owner_user_id
+assign devices_list = "192.168.1.1|DEMO DATA|AA:BB:CC:DD:EE:01|Router Manufacturer A|Router|0~~~192.168.1.3|living-room-light|AA:BB:CC:DD:EE:02|IoT Company A|Smart Device|0~~~192.168.1.10|home-server|AA:BB:CC:DD:EE:03|Embedded Systems Ltd||0~~~192.168.1.16|guest-laptop|AA:BB:CC:DD:EE:04|||0~~~192.168.1.17|work-laptop|AA:BB:CC:DD:EE:05|||0~~~192.168.1.18|kitchen-speaker|AA:BB:CC:DD:EE:06|Audio Systems Inc.|Speaker|0~~~192.168.1.21|bedroom-plug|AA:BB:CC:DD:EE:07|IoT Company A|Smart Device|0~~~192.168.1.22|office-speaker|AA:BB:CC:DD:EE:08|Media Device Corp|Speaker|0~~~192.168.1.24|tv-streamer|AA:BB:CC:DD:EE:09|Tech Giant A|Streaming Device|0~~~192.168.1.41|office-printer|AA:BB:CC:DD:EE:10|Printing Solutions Ltd|Printer|0~~~192.168.1.45|iot-hub|AA:BB:CC:DD:EE:11|||0~~~192.168.1.62|garage-camera|AA:BB:CC:DD:EE:12|||0~~~192.168.1.23|johns-iphone|AA:BB:CC:DD:EE:13||Mobile Device|0~~~192.168.1.34|sams-tablet|AA:BB:CC:DD:EE:14||Mobile Device|-800~~~192.168.1.52|nas-server|AA:BB:CC:DD:EE:15||NAS|-800~~~192.168.1.64|mesh-node|AA:BB:CC:DD:EE:16|Network Equipment Inc.|WiFi Extender|-800~~~192.168.1.27|field-tablet|AA:BB:CC:DD:EE:17|Electronics Corp|Mobile Device|-800~~~192.168.1.26|esp-sensor-01|AA:BB:CC:DD:EE:18|Microcontroller Maker|IoT Sensor|-10000" | split: "~~~"
+endif
+%}
+{% template devices %}
+<div class="layout layout--stretch layout--center">
+  {% comment %} First pass: collect and sort devices {% endcomment %}
+  {% assign online_devices = "" %}
+  {% assign offline_devices = "" %}
+
+  {% for device_line in devices_list %}
+  {% unless device_line == "" %}
+  {% assign parts = device_line | split: "|" %}
+  {% assign last_seen_ts = parts[5] | default: "" %}
+  {% comment %} Check if offline (last seen more than threshold) {% endcomment %}
+  {% assign current_time = trmnl.system.timestamp_utc %}
+  {% assign last_seen_num = last_seen_ts | plus: 0 %}
+  {% if last_seen_num <= 0 %}
+    {% assign last_seen_num = trmnl.system.timestamp_utc | plus: last_seen_num %}
+    {% endif %}
+    {% assign time_diff = current_time | minus: last_seen_num %}
+
+    {% if time_diff > offline_seconds %}
+    {% assign offline_devices = offline_devices | append: device_line | append: "~~~" %}
+    {% else %}
+    {% assign online_devices = online_devices | append: device_line | append: "~~~" %}
+    {% endif %}
+    {% endunless %}
+    {% endfor %}
+    {% comment %} Combine: online first, then offline {% endcomment %}
+    {% assign sorted_devices = online_devices | append: offline_devices %}
+    {% assign sorted_list = sorted_devices | split: "~~~" %}
+    {% assign online_devices_count = online_devices | split: "~~~" | size %}
+    {% assign offline_devices_count = offline_devices | split: "~~~" | size %}
+    {% if sorted_list.size > 0 %}
+    <div class="columns" data-overflow-max-cols="{{max_columns}}" data-overflow-counter="true">
+      <div class="column">
+        {% comment %} Second pass: render sorted devices {% endcomment %}
+        {% for device_line in sorted_list %}
+        {% unless device_line == "" %}
+        {% assign parts = device_line | split: "|" %}
+        {% assign emphasis_num = forloop.index0 | modulo: 2 | plus: 1 %}
+
+        {% assign device_ip = parts[0] %}
+        {% assign device_hostname = parts[1] %}
+        {% assign device_mac = parts[2] %}
+        {% assign device_vendor = parts[3] %}
+        {% assign device_type = parts[4] %}
+        {% assign last_seen_ts = parts[5] | default: "" %}
+
+        {% comment %} Calculate if device is offline (last seen more than threshold) {% endcomment %}
+        {% assign current_time = trmnl.system.timestamp_utc %}
+        {% assign last_seen_num = last_seen_ts | plus: 0 %}
+        {% if last_seen_num <= 0 %}
+          {% assign last_seen_num = trmnl.system.timestamp_utc | plus: last_seen_num %}
+          {% endif %}
+          {% assign time_diff = current_time | minus: last_seen_num %}
+          {% assign is_offline = false %}
+          {% if time_diff > offline_seconds %}
+          {% assign is_offline = true %}
+          {% endif %}
+
+          {% comment %} Check if device should be hidden and apply custom identifiers {% endcomment %}
+          {% assign should_hide = false %}
+          {% assign custom_icon = "" %}
+          {% assign has_custom_override = false %}
+
+          {% if device_identifiers %}
+          {% assign identifier_list = device_identifiers | split: "," %}
+          {% for identifier in identifier_list %}
+          {% assign id_parts = identifier | split: ";" %}
+          {% assign should_apply = false %}
+
+          {% comment %} Check if this identifier matches current device {% endcomment %}
+          {% for id_part in id_parts %}
+          {% assign kv = id_part | split: "=" %}
+          {% assign key = kv[0] | strip | upcase %}
+          {% assign value = kv[1] | strip | upcase %}
+          {% assign device_mac_upper = device_mac | upcase %}
+
+          {% if key == "MAC" and device_mac_upper == value %}
+          {% assign should_apply = true %}
+          {% elsif key == "IP" and device_ip == value %}
+          {% assign should_apply = true %}
+          {% endif %}
+          {% endfor %}
+
+          {% comment %} If matched, apply all custom fields {% endcomment %}
+          {% if should_apply %}
+          {% assign has_custom_override = true %}
+          {% for id_part in id_parts %}
+          {% assign kv = id_part | split: "=" %}
+          {% assign key = kv[0] | strip | downcase %}
+          {% assign value = kv[1] | strip %}
+
+          {% if key == "name" %}
+          {% assign device_hostname = value %}
+          {% elsif key == "vendor" %}
+          {% assign device_vendor = value %}
+          {% elsif key == "type" %}
+          {% assign device_type = value %}
+          {% elsif key == "icon" %}
+          {% assign custom_icon = value %}
+          {% elsif key == "hide" and value == "true" %}
+          {% assign should_hide = true %}
+          {% endif %}
+          {% endfor %}
+          {% endif %}
+          {% endfor %}
+          {% endif %}
+
+          {% comment %} If hostname is same as IP, clear it to avoid redundancy {% endcomment %}
+          {% if device_hostname == device_ip %}
+          {% assign device_hostname = "" %}
+          {% endif %}
+
+          {% unless should_hide %}
+
+          {% assign vendor_lower = device_vendor | downcase %}
+          {% assign hostname_lower = device_hostname | downcase %}
+
+          {% comment %} Build search string for matching {% endcomment %}
+          {% assign search_str = vendor_lower | append: " " | append: hostname_lower %}
+
+          {% comment %} Default icon {% endcomment %}
+          {% assign matched_icon = "router" %}
+
+          {% comment %} Use custom icon if specified {% endcomment %}
+          {% if custom_icon != "" %}
+          {% assign matched_icon = custom_icon %}
+          {% else %}
+          {% comment %} Otherwise check default mappings {% endcomment %}
+          {% for mapping in default_map_array %}
+          {% assign map_parts = mapping | split: "=" %}
+          {% assign icon_name = map_parts[0] | strip %}
+          {% assign keywords = map_parts[1] | split: ";" %}
+
+          {% for keyword in keywords %}
+          {% assign kw = keyword | strip | downcase %}
+          {% if search_str contains kw %}
+          {% assign matched_icon = icon_name %}
+          {% break %}
+          {% endif %}
+          {% endfor %}
+
+          {% if matched_icon != "router" %}
+          {% break %}
+          {% endif %}
+          {% endfor %}
+          {% endif %}
+
+          <div class="item {% if is_offline %} offline-device{% endif %}">
+            <div class="meta w--8 h--8">
+              {% if is_offline %}
+              <span class="material-symbols-outlined offline-device">android_wifi_3_bar_off</span>
+              {% else %}
+              <span class="material-symbols-outlined">{{ matched_icon }}</span>
+              {% endif %}
+            </div>
+            <div class="content{% if is_offline %} offline-device{% endif %}">
+              {% assign show_unknown_device = true %}
+
+              {% if device_hostname != "" %}
+              {% assign show_unknown_device = false %}
+              <span class="title title--small" data-field="device_hostname">{{ device_hostname }}</span>
+              <span class="description" data-field="device_ip">{{ device_ip }}</span>
+              {% else %}
+              <span class="title title--small" data-field="device_ip">{{ device_ip }}</span>
+              {% endif %}
+              {% if device_type != "" %}
+              {% if device_vendor != "" %}
+              <div class="description" data-field="device_type_device_vendor">{{ device_type }} ({{ device_vendor }})</div>
+              {% else %}
+              <div class="description" data-field="device_type">{{ device_type }}</div>
+              {% endif %}
+              {% assign show_unknown_device = false %}
+              {% elsif device_vendor != "" and device_vendor != "Unknown" %}
+              <div class="description" data-field="device_vendor">{{ device_vendor }}</div>
+              {% assign show_unknown_device = false %}
+              {% endif %}
+              {% if show_mac_addresses == "yes" and device_mac != "" %}
+              <div class="description" data-field="device_mac">{{ device_mac }}</div>
+              {% assign show_unknown_device = false %}
+              {% endif %}
+              {% comment %} Only show "Unknown Device" if no custom override and no info available {% endcomment %}
+              {% if show_unknown_device and has_custom_override == false %}
+              <div class="description" data-field="device_unknown">Unknown Device</div>
+              {% endif %}         
+            </div>
+          </div>
+
+          {% endunless %}
+          {% endunless %}
+          {% endfor %}
+      </div>
+    </div>
+    {% else %}
+    <div class="richtext richtext--center gap--large">
+      <img class="image" src="/assets/trmnl--glyph-black-large.svg">
+      <div class="content content--center gap text--center">
+        <p>No devices were found.</p>
+      </div>
+    </div>
+    {% endif %}
+</div>
+<div class="title_bar">
+  <img class="image" src="https://github.com/ExcuseMi/trmnl-network-devices-plugin/blob/main/images/home_network.png?raw=true" />
+  <span class="title">Network devices</span>
+  <span class="instance flex flex--row flex--right">
+    {% if online_devices_count > 0 %}
+    <span class="material-symbols-outlined mb--1">online_prediction</span>
+    <span class="label">{{online_devices_count}}</span>
+    {% endif %}
+    {% if offline_devices_count > 0 %}
+    <span class="material-symbols-outlined mb--1">android_wifi_3_bar_off</span>
+    <span class="label">{{offline_devices_count}}</span>
+    {% endif %}
+</div>
+<script />
+  {% endtemplate %}
