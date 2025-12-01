@@ -54,16 +54,22 @@ MIT
 <!-- PLUGIN_STATS_START -->
 ## 🚀 TRMNL Plugin(s)
 
-*Last updated: 2025-12-01 15:43:53 UTC*
+*Last updated: 2025-12-01 23:40:38 UTC*
 
 
-## 🔒 Plugin ID: 189338
+## <img src="assets/plugin-images/189338_icon.png" alt="Network Devices icon" width="32"/> [Network Devices](https://usetrmnl.com/recipes/189338)
 
-**Status**: ⏳ Not yet published on TRMNL or API unavailable
+![Network Devices screenshot](assets/plugin-images/189338_screenshot.png)
 
-This plugin is configured but either hasn't been published to the TRMNL marketplace yet or the API is temporarily unavailable.
+### Description
+Keep tabs on every device connected to your home or office network with automatic discovery, smart categorization, and real-time status tracking. Network Devices scans your local network, identifies devices by vendor and type, and displays them with intuitive icons on your TRMNL.<br /><br />Features:<br />• Automatic device detection via arp-scan and nmap<br />• Smart vendor identification from MAC addresses<br />• Offline tracking - see when devices disconnect<br />• Customizable names, icons, and device types<br />• Clean, modern interface with Material Symbols icons<br /><br />Requires a Docker container running on your network (5 min setup). Perfect for monitoring IoT devices, tracking network usage, or keeping an eye on who's connected.
 
-**Plugin URL**: https://usetrmnl.com/recipes/189338
+### 📊 Statistics
+
+| Metric | Value |
+|--------|-------|
+| Installs | 1 |
+| Forks | 3 |
 
 ---
 
