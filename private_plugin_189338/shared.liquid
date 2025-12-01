@@ -5,12 +5,19 @@
     font-variation-settings: 'FILL' 0, 'wght' 600, 'GRAD' 0, 'opsz' 26;
   }
   .offline-device {
-    opacity: 0.6;
-  }
-</style>
+    #opacity: 0.6;
+    }
+    .small-icon {
+      font-size: 14px;
+      vertical-align: middle;
+    }
+    .trmnl .border--h-1.top::before {
+      top:0;
+      bottom:auto;
+    }
+    </style>
 {% liquid
 assign owner_user_id = 6458
-# Material Symbols icon mappings
 assign default_mappings = "memory=raspberry;pi|phone_iphone=apple;iphone|tablet_mac=ipad|laptop_mac=macbook;imac|headphones=airpod|nest_remote=google;nest|cast=chromecast|smartphone=samsung;galaxy;phone;mobile;android|speaker=sonos;audio|router=tp-link;tplink;netgear;linksys;asus;d-link;gateway;modem;ubiquiti;unifi|print=brother;hp;epson;canon;printer|lightbulb=hue;light;bulb|smart_toy=amazon;echo;alexa|sports_esports=microsoft;xbox|videogame_asset=sony;playstation;ps4;ps5;nintendo;switch|tv=nvidia;shield;roku|power=tuya;smart;plug|settings_input_hdmi=switch|storage=nas|videocam=camera;cam|thermostat=thermostat|doorbell=doorbell|tablet=tablet|laptop=laptop|computer=desktop;pc|watch=watch"
 assign default_map_array = default_mappings | split: "|"
 
@@ -23,13 +30,13 @@ assign devices_list = "192.168.1.1|DEMO DATA|AA:BB:CC:DD:EE:01|Router Manufactur
 endif
 %}
 {% template devices %}
-{% assign offline_gray = "" %}
+{% assign offline_gray = "text--gray-10" %}
 
 <div class="layout layout--stretch layout--center">
   {% comment %} First pass: collect and sort devices {% endcomment %}
   {% assign online_devices = "" %}
   {% assign offline_devices = "" %}
-
+  {% assign had_offlines = false %}
   {% for device_line in devices_list %}
   {% unless device_line == "" %}
   {% assign parts = device_line | split: "|" %}
@@ -57,7 +64,7 @@ endif
     {% if sorted_list.size > 0 %}
     <div class="columns" data-overflow-max-cols="{{max_columns}}" data-overflow-counter="true">
       <div class="column">
-        
+
         {% comment %} Second pass: render sorted devices {% endcomment %}
         {% for device_line in sorted_list %}
         {% unless device_line == "" %}
@@ -81,6 +88,7 @@ endif
           {% assign is_offline = false %}
           {% if time_diff > offline_seconds %}
           {% assign is_offline = true %}
+
           {% endif %}
 
           {% comment %} Check if device should be hidden and apply custom identifiers {% endcomment %}
@@ -171,56 +179,69 @@ endif
           {% endif %}
           {% endfor %}
           {% endif %}
-
-          <div class="item item--emphasis-{% if is_offline %}1{% else %}{{ forloop.index0 | modulo: 2 | plus: 2}}{% endif %} {% if is_offline %} offline-device {{offline_gray}}{% endif %}">
+          {% assign first_offline = false %}
+          {% if is_offline and online_devices_count > 0 %}
+          {% unless has_offlines %}
+           <div class="item divider"></div>
+          {% endunless %}
+          {% endif %}
+          <div class="item item--emphasis-{% if is_offline %}1{% else %}{{ forloop.index0 | modulo: 2 | plus: 2}}{% endif %}">
             <div class="meta w--8">
               {% if is_offline %}
-              <div class="image image-stroke material-symbols-outlined offline-device">android_wifi_3_bar_off</div>
+              <div class="image image-stroke material-symbols-outlined offline-device {{offline_gray}}">signal_disconnected</div>
               {% else %}
-              <div class="image image-stroke material-symbols-outlined">{{ matched_icon }}</div>
+              <div class="image image-dither image-stroke material-symbols-outlined">{{ matched_icon }}</div>
               {% endif %}
             </div>
 
-            <div class="content{% if is_offline %} offline-device {{offline_gray}}{% endif %}">
+            <div class="content{% if is_offline %} {{offline_gray}}{% endif %}">
               {% assign show_unknown_device = true %}
 
               {% if device_hostname != "" %}
               {% assign show_unknown_device = false %}
-              <span class="title title--small text-stroke {% if is_offline %} offline-device {{offline_gray}}{% endif %}" data-field="device_hostname">{{ device_hostname }}</span>
-              <span class="description {% if is_offline %} offline-device {{offline_gray}}{% endif %}" data-field="device_ip">{{ device_ip }}</span>
+              <span class="title title--small {% if is_offline %} offline-device {{offline_gray}}{% else %} text-stroke{% endif %}" data-field="device_hostname">{{ device_hostname }}</span>
+              <span class="description {% if is_offline %} {{offline_gray}}{% endif %}" data-field="device_ip">{{ device_ip }}</span>
               {% else %}
-              <span class="title title--small text-stroke  {% if is_offline %} offline-device {{offline_gray}}{% endif %}" data-field="device_ip">{{ device_ip }}</span>
+              <span class="title title--small text-stroke  {% if is_offline %} offline-device {{offline_gray}}{% else %} text-stroke{% endif %}" data-field="device_ip">{{ device_ip }}</span>
               {% endif %}
               {% if device_type != "" %}
               {% if device_vendor != "" %}
-              <div class="description {% if is_offline %} offline-device {{offline_gray}}{% endif %}" data-field="device_type_device_vendor">{{ device_type }} ({{ device_vendor }})</div>
+              <div class="description {% if is_offline %} {{offline_gray}}{% endif %}" data-field="device_type_device_vendor">{{ device_type }} ({{ device_vendor }})</div>
               {% else %}
-              <div class="description {% if is_offline %} offline-device {{offline_gray}}{% endif %}" data-field="device_type">{{ device_type }}</div>
+              <div class="description {% if is_offline %} {{offline_gray}}{% endif %}" data-field="device_type">{{ device_type }}</div>
               {% endif %}
               {% assign show_unknown_device = false %}
               {% elsif device_vendor != "" and device_vendor != "Unknown" %}
-              <div class="description {% if is_offline %} offline-device {{offline_gray}}{% endif %}" data-field="device_vendor">{{ device_vendor }}</div>
+              <div class="description {% if is_offline %} {{offline_gray}}{% endif %}" data-field="device_vendor">{{ device_vendor }}</div>
               {% assign show_unknown_device = false %}
               {% endif %}
               {% if show_mac_addresses == "yes" and device_mac != "" %}
-              <div class="description {% if is_offline %} offline-device {{offline_gray}}{% endif %}" data-field="device_mac">{{ device_mac }}</div>
+              <div class="description {% if is_offline %} {{offline_gray}}{% endif %}" data-field="device_mac">{{ device_mac }}</div>
               {% assign show_unknown_device = false %}
               {% endif %}
               {% comment %} Only show "Unknown Device" if no custom override and no info available {% endcomment %}
               {% if show_unknown_device and has_custom_override == false %}
-              <div class="description {% if is_offline %} offline-device {{offline_gray}}{% endif %}" data-field="device_unknown">Unknown Device</div>
-              {% endif %}         
+              <div class="description {% if is_offline %} {{offline_gray}}{% endif %}" data-field="device_unknown">Unknown Device</div>
+              {% endif %}   
+              {% if is_offline %}
+              <div>
+                <span class="material-symbols-outlined image image-stroke offline-device small-icon" style="font-size: 12px">history</span>
+                <span class="description time-delta {{offline_gray}}" data-seconds="{{time_diff}}"></span>
+              </div>
+              {% endif %}
             </div>
           </div>
 
           {% endunless %}
           {% endunless %}
+          {% if is_offline %}
+          {% assign has_offlines = true %}
+          {% endif %}
           {% endfor %}
       </div>
     </div>
     {% else %}
     <div class="richtext richtext--center gap--large">
-      <img class="image" src="/assets/trmnl--glyph-black-large.svg">
       <div class="content content--center gap text--center">
         <p>No devices were found.</p>
       </div>
@@ -240,5 +261,56 @@ endif
     <span class="label">{{offline_devices_count}}</span>
     {% endif %}
 </div>
+<script>
+  (function() {
+    function formatTimeDelta() {
+      const locale = '{{ user_locale }}';
+
+      document.querySelectorAll('.time-delta').forEach(el => {
+        const seconds = parseInt(el.dataset.seconds);
+        if (!seconds) return;
+
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(seconds / 3600);
+        const days = Math.floor(seconds / 86400);
+        const months = Math.floor(days / 30);
+        const years = Math.floor(days / 365);
+
+        let formatted;
+        let unit;
+
+        if (years > 0) {
+          formatted = years;
+          unit = years === 1 ? 'year' : 'years';
+        } else if (months > 0) {
+          formatted = months;
+          unit = months === 1 ? 'month' : 'months';
+        } else if (days > 0) {
+          formatted = days;
+          unit = days === 1 ? 'day' : 'days';
+        } else if (hours > 0) {
+          formatted = hours;
+          unit = hours === 1 ? 'hour' : 'hours';
+        } else if (minutes > 0) {
+          formatted = minutes;
+          unit = minutes === 1 ? 'minute' : 'minutes';
+        } else {
+          formatted = '<1';
+          unit = 'minute';
+        }
+
+        el.textContent = '' + formatted + ' ' + unit + ' ago';
+      });
+    }
+
+    // Run immediately
+    formatTimeDelta();
+    // Also run when DOM is ready (in case script runs before elements exist)
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', formatTimeDelta);
+    }
+  })();
+</script>
 <script />
   {% endtemplate %}
+
