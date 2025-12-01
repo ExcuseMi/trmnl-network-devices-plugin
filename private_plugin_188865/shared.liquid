@@ -7,7 +7,6 @@
   .offline-device {
     opacity: 0.6;
   }
-
 </style>
 {% liquid
 assign owner_user_id = 6458
@@ -24,6 +23,8 @@ assign devices_list = "192.168.1.1|DEMO DATA|AA:BB:CC:DD:EE:01|Router Manufactur
 endif
 %}
 {% template devices %}
+{% assign offline_gray = "" %}
+
 <div class="layout layout--stretch layout--center">
   {% comment %} First pass: collect and sort devices {% endcomment %}
   {% assign online_devices = "" %}
@@ -56,6 +57,7 @@ endif
     {% if sorted_list.size > 0 %}
     <div class="columns" data-overflow-max-cols="{{max_columns}}" data-overflow-counter="true">
       <div class="column">
+        
         {% comment %} Second pass: render sorted devices {% endcomment %}
         {% for device_line in sorted_list %}
         {% unless device_line == "" %}
@@ -170,42 +172,43 @@ endif
           {% endfor %}
           {% endif %}
 
-          <div class="item {% if is_offline %} offline-device{% endif %}">
-            <div class="meta w--8 h--8">
+          <div class="item item--emphasis-{% if is_offline %}1{% else %}{{ forloop.index0 | modulo: 2 | plus: 2}}{% endif %} {% if is_offline %} offline-device {{offline_gray}}{% endif %}">
+            <div class="meta w--8">
               {% if is_offline %}
-              <span class="material-symbols-outlined offline-device">android_wifi_3_bar_off</span>
+              <div class="image image-stroke material-symbols-outlined offline-device">android_wifi_3_bar_off</div>
               {% else %}
-              <span class="material-symbols-outlined">{{ matched_icon }}</span>
+              <div class="image image-stroke material-symbols-outlined">{{ matched_icon }}</div>
               {% endif %}
             </div>
-            <div class="content{% if is_offline %} offline-device{% endif %}">
+
+            <div class="content{% if is_offline %} offline-device {{offline_gray}}{% endif %}">
               {% assign show_unknown_device = true %}
 
               {% if device_hostname != "" %}
               {% assign show_unknown_device = false %}
-              <span class="title title--small" data-field="device_hostname">{{ device_hostname }}</span>
-              <span class="description" data-field="device_ip">{{ device_ip }}</span>
+              <span class="title title--small text-stroke {% if is_offline %} offline-device {{offline_gray}}{% endif %}" data-field="device_hostname">{{ device_hostname }}</span>
+              <span class="description {% if is_offline %} offline-device {{offline_gray}}{% endif %}" data-field="device_ip">{{ device_ip }}</span>
               {% else %}
-              <span class="title title--small" data-field="device_ip">{{ device_ip }}</span>
+              <span class="title title--small text-stroke  {% if is_offline %} offline-device {{offline_gray}}{% endif %}" data-field="device_ip">{{ device_ip }}</span>
               {% endif %}
               {% if device_type != "" %}
               {% if device_vendor != "" %}
-              <div class="description" data-field="device_type_device_vendor">{{ device_type }} ({{ device_vendor }})</div>
+              <div class="description {% if is_offline %} offline-device {{offline_gray}}{% endif %}" data-field="device_type_device_vendor">{{ device_type }} ({{ device_vendor }})</div>
               {% else %}
-              <div class="description" data-field="device_type">{{ device_type }}</div>
+              <div class="description {% if is_offline %} offline-device {{offline_gray}}{% endif %}" data-field="device_type">{{ device_type }}</div>
               {% endif %}
               {% assign show_unknown_device = false %}
               {% elsif device_vendor != "" and device_vendor != "Unknown" %}
-              <div class="description" data-field="device_vendor">{{ device_vendor }}</div>
+              <div class="description {% if is_offline %} offline-device {{offline_gray}}{% endif %}" data-field="device_vendor">{{ device_vendor }}</div>
               {% assign show_unknown_device = false %}
               {% endif %}
               {% if show_mac_addresses == "yes" and device_mac != "" %}
-              <div class="description" data-field="device_mac">{{ device_mac }}</div>
+              <div class="description {% if is_offline %} offline-device {{offline_gray}}{% endif %}" data-field="device_mac">{{ device_mac }}</div>
               {% assign show_unknown_device = false %}
               {% endif %}
               {% comment %} Only show "Unknown Device" if no custom override and no info available {% endcomment %}
               {% if show_unknown_device and has_custom_override == false %}
-              <div class="description" data-field="device_unknown">Unknown Device</div>
+              <div class="description {% if is_offline %} offline-device {{offline_gray}}{% endif %}" data-field="device_unknown">Unknown Device</div>
               {% endif %}         
             </div>
           </div>
@@ -225,15 +228,15 @@ endif
     {% endif %}
 </div>
 <div class="title_bar">
-  <img class="image" src="https://github.com/ExcuseMi/trmnl-network-devices-plugin/blob/main/images/home_network.png?raw=true" />
+  <img class="image image-stroke" src="https://github.com/ExcuseMi/trmnl-network-devices-plugin/blob/main/images/home_network.png?raw=true" />
   <span class="title">Network devices</span>
   <span class="instance flex flex--row flex--right">
     {% if online_devices_count > 0 %}
-    <span class="material-symbols-outlined mb--1">online_prediction</span>
+    <span class="image image-stroke material-symbols-outlined mb--1">online_prediction</span>
     <span class="label">{{online_devices_count}}</span>
     {% endif %}
     {% if offline_devices_count > 0 %}
-    <span class="material-symbols-outlined mb--1">android_wifi_3_bar_off</span>
+    <span class="image image-stroke material-symbols-outlined mb--1">android_wifi_3_bar_off</span>
     <span class="label">{{offline_devices_count}}</span>
     {% endif %}
 </div>
