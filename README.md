@@ -33,6 +33,7 @@ BYTE_LIMIT=2000    # 2000 for free, 5000 for TRMNL+
 NETWORK=192.168.1.0/24
 # How long to keep offline devices in minutes (default: 1440 = 24 hours)
 # Devices last seen longer than this will be removed from display
+# These offline devices will still be sent to the TRMNL plugin until the OFFLINE RETENTION is reached.
 # Examples: 60 (1 hour), 180 (3 hours), 720 (12 hours), 1440 (24 hours)
 OFFLINE_RETENTION=1440
 ```
