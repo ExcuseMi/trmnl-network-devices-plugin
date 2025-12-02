@@ -28,6 +28,13 @@ That's it. The scanner will auto-detect your network and start sending data to T
 PLUGIN_UUID=your_plugin_uuid_here
 INTERVAL=15        # Scan every 15 minutes
 BYTE_LIMIT=2000    # 2000 for free, 5000 for TRMNL+
+# Network to scan in CIDR notation (auto-detected if empty)
+# Example: 192.168.1.0/24
+NETWORK=192.168.1.0/24
+# How long to keep offline devices in minutes (default: 1440 = 24 hours)
+# Devices last seen longer than this will be removed from display
+# Examples: 60 (1 hour), 180 (3 hours), 720 (12 hours), 1440 (24 hours)
+OFFLINE_RETENTION=1440
 ```
                                 
 ## Updating
@@ -64,7 +71,7 @@ Once devices are found, the scanner:
 #### 2. Device has network isolation enabled
 - **Cause:** Some IoT devices, guest networks, or AP isolation features prevent device discovery
 - **Check:** Can you ping the device from the scanner host? `ping 192.168.1.x`
-- **Solution:** Disable AP/client isolation in your router settings, or manually add the device via IP in TRMNL Device Configuration
+- **Solution:** Disable AP/client isolation in your router settings
 
 #### 3. Device doesn't respond to ARP or ping
 - **Cause:** Some devices intentionally hide from network scans (stealth mode), or firewalls block ICMP/ARP
@@ -73,8 +80,7 @@ Once devices are found, the scanner:
   docker exec network-scanner arp-scan --interface=eth0 --localnet
   docker exec network-scanner nmap -sn 192.168.1.0/24
   ```
-- **Solution:** These devices can't be auto-discovered; add them manually in TRMNL Device Configuration if you know their IP
-
+- **Sadly,  These devices can't be auto-discovered **
 #### 4. Scanner container networking issues
 - **Cause:** Container must run in `host` network mode to see local devices, and needs `privileged: true` for raw socket access
 - **Check:** Verify docker-compose.yml has both settings:
@@ -124,3 +130,6 @@ Keep tabs on every device connected to your home or office network with automati
 ---
 
 <!-- PLUGIN_STATS_END -->
+## Credits
+
+- Uses [Wireshark OUI Database](https://www.wireshark.org/) for vendor identification
