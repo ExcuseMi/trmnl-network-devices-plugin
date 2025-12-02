@@ -21,17 +21,17 @@
     </style>
 {% liquid
 assign owner_user_id = 6458
-assign default_mappings = "memory=raspberry;pi|phone_iphone=apple;iphone|tablet_mac=ipad|laptop_mac=macbook;imac|headphones=airpod|nest_remote=google;nest|cast=chromecast|smartphone=samsung;galaxy;phone;mobile;android|speaker=sonos;audio|router=tp-link;tplink;netgear;linksys;asus;d-link;gateway;modem;ubiquiti;unifi|print=brother;hp;epson;canon;printer|lightbulb=hue;light;bulb|smart_toy=amazon;echo;alexa|sports_esports=microsoft;xbox|videogame_asset=sony;playstation;ps4;ps5;nintendo;switch|tv=nvidia;shield;roku|power=tuya;smart;plug|settings_input_hdmi=switch|storage=nas|videocam=camera;cam|thermostat=thermostat|doorbell=doorbell|tablet=tablet|laptop=laptop|computer=desktop;pc|watch=watch"
+assign default_mappings = "memory=raspberry;pi|phone_iphone=apple;iphone|tablet_mac=ipad|laptop_mac=macbook;imac|headphones=airpod|nest_remote=google;nest|cast=chromecast|smartphone=samsung;galaxy;phone;mobile;android|speaker=sonos;audio;speaker|router=tp-link;tplink;netgear;linksys;asus;d-link;gateway;modem;ubiquiti;unifi|print=brother;hp;epson;canon;printer|lightbulb=hue;light;bulb|smart_toy=amazon;echo;alexa|sports_esports=microsoft;xbox|videogame_asset=sony;playstation;ps4;ps5;nintendo;switch|tv=nvidia;shield;roku|power=tuya;smart;plug|settings_input_hdmi=switch|storage=nas|videocam=camera;cam|thermostat=thermostat|doorbell=doorbell|tablet=tablet|laptop=laptop|computer=desktop;pc|watch=watch|host=server"
 assign default_map_array = default_mappings | split: "|"
 
 assign device_identifiers = trmnl.plugin_settings.custom_fields_values.device_identifiers
 assign show_mac_addresses = trmnl.plugin_settings.custom_fields_values.show_mac_addresses | downcase
-assign show_offline_devices = trmnl.plugin_settings.custom_fields_values.show_offline_devices | default: "yes" 
+assign show_offline_devices = trmnl.plugin_settings.custom_fields_values.show_offline_devices | default: "yes"
 
 assign offline_threshold = trmnl.plugin_settings.custom_fields_values.offline_threshold | default: 10
 assign offline_seconds = offline_threshold | plus: 0 | times: 60
 if trmnl.user.id == owner_user_id
-assign devices_list = "192.168.1.1|DEMO DATA|AA:BB:CC:DD:EE:01|Router Manufacturer A|Router|0~~~192.168.1.3|living-room-light|AA:BB:CC:DD:EE:02|IoT Company A|Smart Device|0~~~192.168.1.10|home-server|AA:BB:CC:DD:EE:03|Embedded Systems Ltd||0~~~192.168.1.16|guest-laptop|AA:BB:CC:DD:EE:04|||0~~~192.168.1.17|work-laptop|AA:BB:CC:DD:EE:05|||0~~~192.168.1.18|kitchen-speaker|AA:BB:CC:DD:EE:06|Audio Systems Inc.|Speaker|0~~~192.168.1.21|bedroom-plug|AA:BB:CC:DD:EE:07|IoT Company A|Smart Device|0~~~192.168.1.22|office-speaker|AA:BB:CC:DD:EE:08|Media Device Corp|Speaker|0~~~192.168.1.24|tv-streamer|AA:BB:CC:DD:EE:09|Tech Giant A|Streaming Device|0~~~192.168.1.41|office-printer|AA:BB:CC:DD:EE:10|Printing Solutions Ltd|Printer|0~~~192.168.1.45|iot-hub|AA:BB:CC:DD:EE:11|||0~~~192.168.1.62|garage-camera|AA:BB:CC:DD:EE:12|||0~~~192.168.1.23|johns-iphone|AA:BB:CC:DD:EE:13||Mobile Device|0~~~192.168.1.34|sams-tablet|AA:BB:CC:DD:EE:14||Mobile Device|-800~~~192.168.1.52|nas-server|AA:BB:CC:DD:EE:15||NAS|-800~~~192.168.1.64|mesh-node|AA:BB:CC:DD:EE:16|Network Equipment Inc.|WiFi Extender|-800~~~192.168.1.27|field-tablet|AA:BB:CC:DD:EE:17|Electronics Corp|Mobile Device|-800~~~192.168.1.26|esp-sensor-01|AA:BB:CC:DD:EE:18|Microcontroller Maker|IoT Sensor|-10000" | split: "~~~"
+  assign devices_list = "192.168.1.1|DEMO DATA|AA:BB:CC:DD:EE:01|Router Manufacturer A|Router|0~~~192.168.1.3|living-room-light|AA:BB:CC:DD:EE:02|IoT Company A|Smart Device|0~~~192.168.1.10|home-server|AA:BB:CC:DD:EE:03|Embedded Systems Ltd||0~~~192.168.1.16|guest-laptop|AA:BB:CC:DD:EE:04|||0~~~192.168.1.17|work-laptop|AA:BB:CC:DD:EE:05|||0~~~192.168.1.18|kitchen-speaker|AA:BB:CC:DD:EE:06|Audio Systems Inc.|Speaker|0~~~192.168.1.21|bedroom-plug|AA:BB:CC:DD:EE:07|IoT Company A|Smart Device|0~~~192.168.1.22|office-speaker|AA:BB:CC:DD:EE:08|Media Device Corp|Speaker|0~~~192.168.1.24|tv-streamer|AA:BB:CC:DD:EE:09|Tech Giant A|Streaming Device|0~~~192.168.1.41|office-printer|AA:BB:CC:DD:EE:10|Printing Solutions Ltd|Printer|0~~~192.168.1.45|iot-hub|AA:BB:CC:DD:EE:11|||0~~~192.168.1.62|garage-camera|AA:BB:CC:DD:EE:12|||0~~~192.168.1.23|johns-iphone|AA:BB:CC:DD:EE:13||Mobile Device|0~~~192.168.1.34|sams-tablet|AA:BB:CC:DD:EE:14||Mobile Device|-800~~~192.168.1.52|nas-server|AA:BB:CC:DD:EE:15||NAS|-800~~~192.168.1.64|mesh-node|AA:BB:CC:DD:EE:16|Network Equipment Inc.|WiFi Extender|-800~~~192.168.1.27|field-tablet|AA:BB:CC:DD:EE:17|Electronics Corp|Mobile Device|-800~~~192.168.1.26|esp-sensor-01|AA:BB:CC:DD:EE:18|Microcontroller Maker|IoT Sensor|-10000" | split: "~~~"
 endif
 %}
 {% template devices %}
@@ -191,14 +191,14 @@ endif
           {% endif %}
           {% if show_headers %}
           {% unless is_offline %}
-          {% if forloop.index0 == 0 %}  
-          <span class="label label--medium group-header" data-group-header="true">ONLINE</span>       
+          {% if forloop.index0 == 0 %}
+          <span class="label label--medium group-header" data-group-header="true">ONLINE</span>
           {% endif %}
           {% endunless %}
           {% assign first_offline = false %}
           {% if is_offline and online_devices_count > 0 %}
           {% unless has_offlines %}
-          <span class="label label--medium group-header" data-group-header="true">OFFLINE</span>       
+          <span class="label label--medium group-header" data-group-header="true">OFFLINE</span>
           {% endunless %}
           {% endif %}
           {% endif %}
@@ -240,7 +240,7 @@ endif
               {% comment %} Only show "Unknown Device" if no custom override and no info available {% endcomment %}
               {% if show_unknown_device and has_custom_override == false %}
               <div class="description {% if is_offline %} {{offline_gray}}{% endif %}" data-field="device_unknown">Unknown Device</div>
-              {% endif %}   
+              {% endif %}
               {% if is_offline %}
               <div>
                 <span class="material-symbols-outlined image image-stroke offline-device small-icon" style="font-size: 12px">history</span>
@@ -259,10 +259,9 @@ endif
       </div>
     </div>
     {% else %}
-    <div class="richtext richtext--center gap--large">
-      <div class="content content--center gap text--center">
-        <p>No devices were found.</p>
-      </div>
+    <div class="flex flex--col center flex--center-y" data-overflow="true">
+    <div class="title text--center">No devices were found.</div>
+    {{ "https://github.com/ExcuseMi/trmnl-network-devices-plugin/" | qr_code: 4, 'l'}}
     </div>
     {% endif %}
 </div>
@@ -329,6 +328,6 @@ endif
     }
   })();
 </script>
-<script />
+<script></script>
   {% endtemplate %}
 

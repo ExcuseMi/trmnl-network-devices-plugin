@@ -497,14 +497,12 @@ def send_to_trmnl(devices: List[Dict]):
             'type': device['type']
         }
 
-    # Add offline devices (seen in last 24h)
-    # YES - we use the OLD timestamp (last_seen) so the display knows when they were last online
-    offline_count = 0
+    offline_devices = []
+
     for identifier, data in state.items():
         last_seen = data.get('last_seen', 0)
 
         if identifier not in current_map and last_seen > cutoff:
-            offline_count += 1
             hostname = data.get('hostname', '')
             if hostname == data.get('ip'):
                 hostname = ''
@@ -514,13 +512,30 @@ def send_to_trmnl(devices: List[Dict]):
             if vendor and 'unknown' in vendor.lower():
                 vendor = ''
 
-            # Use OLD timestamp (last_seen) not current_timestamp
-            device_str = f"{data.get('ip')}|{hostname}|{data.get('mac')}|{vendor}|{data.get('type', 'Network Device')}|{last_seen}"
-            devices_list.append(device_str)
+            # Store device data in a tuple for sorting
+            offline_devices.append((
+                last_seen,  # First element for sorting
+                data.get('ip'),
+                hostname,
+                data.get('mac'),
+                vendor,
+                data.get('type', ''),
+                identifier,
+                data  # Keep the full data for logging
+            ))
 
-            age_minutes = (current_timestamp - last_seen) // 60
-            log(f"  Adding offline device: {data.get('ip')} ({data.get('hostname')}) - last seen {age_minutes}m ago (timestamp: {last_seen})",
-                Colors.YELLOW)
+    # Sort by last_seen descending (most recent first)
+    offline_devices.sort(key=lambda x: x[0], reverse=True)
+
+    # Now process sorted devices
+    offline_count = len(offline_devices)
+    for last_seen, ip, hostname, mac, vendor, device_type, identifier, data in offline_devices:
+        device_str = f"{ip}|{hostname}|{mac}|{vendor}|{device_type}|{last_seen}"
+        devices_list.append(device_str)
+
+        age_minutes = (current_timestamp - last_seen) // 60
+        log(f"  Adding offline device: {ip} ({data.get('hostname')}) - last seen {age_minutes}m ago (timestamp: {last_seen})",
+            Colors.YELLOW)
 
     log(f"Added {offline_count} offline devices from state", Colors.YELLOW if offline_count > 0 else Colors.BLUE)
 
@@ -562,11 +577,6 @@ def send_to_trmnl(devices: List[Dict]):
     payload_size = len(payload_json)
 
     log(f"Sending to TRMNL... (size: {payload_size} bytes, devices: {len(devices_list)})", Colors.BLUE)
-    log("Payload preview (first 3 devices):", Colors.BLUE)
-    for i, device_str in enumerate(devices_list[:3]):
-        log(f"  [{i + 1}] {device_str}", Colors.BLUE)
-    if len(devices_list) > 3:
-        log(f"  ... and {len(devices_list) - 3} more devices", Colors.BLUE)
 
     # Truncate if too large
     if payload_size > BYTE_LIMIT:
