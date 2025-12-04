@@ -1,3 +1,13 @@
+strategy: webhook
+no_screen_padding: 'no'
+dark_mode: 'no'
+static_data: ''
+polling_verb: get
+polling_url: ''
+polling_headers: ''
+polling_body: ''
+id: 189338
+custom_fields:
 - keyname: author_info
   name: About This Plugin
   field_type: author_bio
@@ -88,7 +98,7 @@
     badges below device information.
   optional: true
   conditional_validation:
-    when: 'no'
+  - when: 'no'
     hidden:
     - port_display_mode
     - port_labels
@@ -123,3 +133,5 @@
     per-device port labels,</strong> use the Device Configuration setting with the
     <code>ports</code> field.
   optional: true
+name: Network Devices v1.1
+refresh_interval: 5

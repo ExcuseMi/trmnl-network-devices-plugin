@@ -125,10 +125,10 @@ def generate_settings():
             'default': 'no',
             'help_text': 'Shows which ports are open on each device. Requires port scanning to be enabled in your Docker container (ENABLE_PORT_SCAN=true). Ports appear as small badges below device information.',
             'optional': True,
-            'conditional_validation': {
+            'conditional_validation': [{
                 "when": "no",
                 "hidden": [ "port_display_mode", "port_labels"]
-            }
+            }]
         },
         {
             'keyname': 'port_display_mode',
@@ -167,7 +167,7 @@ def main():
     data_dir.mkdir(exist_ok=True)
 
     # Output to data/settings.yml
-    output_file = data_dir / 'settings.yml'
+    output_file = data_dir / 'options.yml'
     with open(output_file, 'w') as f:
         yaml.dump(settings, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 

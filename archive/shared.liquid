@@ -409,7 +409,7 @@ endif
                 {% endif %}
                 
                 {% comment %} Display based on mode {% endcomment %}
-                {% assign label_style = "label label--small bg--gray-75" %}
+                {% assign label_style = "label label--small label--outline" %}
                 {% if port_display_mode == "number" %}
                 <span class="{{label_style}}">{{ port_num }}</span>
                 {% elsif port_display_mode == "label" %}
