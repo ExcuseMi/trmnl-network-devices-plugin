@@ -756,7 +756,7 @@ def send_to_trmnl(devices: List[Dict]):
     save_state(merged_state)
 
     # Get version string with timestamp
-    timestamp = datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+    timestamp = int(datetime.now(UTC).timestamp())
     current_version = get_current_version()
     latest_version = get_latest_version()
 
