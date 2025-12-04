@@ -720,8 +720,8 @@ def send_to_trmnl(devices: List[Dict]):
     # Now process sorted devices
     offline_count = len(offline_devices)
     for last_seen, ip, hostname, mac, vendor, device_type, ports, identifier, data in offline_devices:
-        ports_str = ','.join(str(p) for p in ports) if ports else ''
-        device_str = f"{ip}|{hostname}|{mac}|{vendor}|{device_type}|{last_seen}|{ports_str}"
+        # Don't send ports for offline devices (they may not be accurate when device comes back online)
+        device_str = f"{ip}|{hostname}|{mac}|{vendor}|{device_type}|{last_seen}|"
         devices_list.append(device_str)
 
         age_minutes = (current_timestamp - last_seen) // 60
@@ -785,9 +785,9 @@ def send_to_trmnl(devices: List[Dict]):
     if payload_size > BYTE_LIMIT:
         log(f"Payload exceeds limit ({payload_size} > {BYTE_LIMIT}), truncating...", Colors.YELLOW)
 
-        # Separate online and offline
-        online = [d for d in devices_list if int(d.split('|')[5]) >= current_timestamp - 600]
-        offline = [d for d in devices_list if int(d.split('|')[5]) < current_timestamp - 600]
+        # Separate online (in current scan) and offline (from previous scans)
+        online = [d for d in devices_list if int(d.split('|')[5]) >= timestamp]
+        offline = [d for d in devices_list if int(d.split('|')[5]) < timestamp]
 
         log(f"Online devices: {len(online)}, Offline devices: {len(offline)}", Colors.YELLOW)
 
