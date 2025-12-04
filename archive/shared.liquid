@@ -198,7 +198,6 @@ endif
       {% assign offline_devices_count = offline_devices_count | plus: 1 %}
     {% endunless %}
   {% endfor %}
-     
   {% if sorted_devices.size > 0 %}
     <div class="columns" data-overflow-max-cols="{{max_columns}}" data-overflow-counter="true">
       <div class="column">
@@ -409,7 +408,7 @@ endif
                 {% endif %}
                 
                 {% comment %} Display based on mode {% endcomment %}
-                {% assign label_style = "label label--small label--outline" %}
+                {% assign label_style = "description bg--gray-60 rounded pl--1 pr--1" %}
                 {% if port_display_mode == "number" %}
                 <span class="{{label_style}}">{{ port_num }}</span>
                 {% elsif port_display_mode == "label" %}
