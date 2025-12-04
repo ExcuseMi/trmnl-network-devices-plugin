@@ -87,6 +87,11 @@
     be enabled in your Docker container (ENABLE_PORT_SCAN=true). Ports appear as small
     badges below device information.
   optional: true
+  conditional_validation:
+    when: 'no'
+    hidden:
+    - port_display_mode
+    - port_labels
 - keyname: port_display_mode
   field_type: select
   name: Port Display Mode

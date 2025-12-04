@@ -124,7 +124,11 @@ def generate_settings():
             ],
             'default': 'no',
             'help_text': 'Shows which ports are open on each device. Requires port scanning to be enabled in your Docker container (ENABLE_PORT_SCAN=true). Ports appear as small badges below device information.',
-            'optional': True
+            'optional': True,
+            'conditional_validation': {
+                "when": "no",
+                "hidden": [ "port_display_mode", "port_labels"]
+            }
         },
         {
             'keyname': 'port_display_mode',
