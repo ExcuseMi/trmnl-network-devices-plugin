@@ -1,0 +1,10 @@
+{
+  "repo": "ExcuseMi/trmnl-network-devices-plugin",
+  "branch": "portscan",
+  "versions": [
+    {
+      "version": "v1.1",
+      "changelog": "Add port scanning and version checking"
+    }
+  ]
+}

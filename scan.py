@@ -12,15 +12,22 @@ from datetime import datetime, timedelta, UTC
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+# Version
+CURRENT_VERSION = "v1.1"
+
 # Configuration
 VENDOR_DB_URL = "https://www.wireshark.org/download/automated/data/manuf"
 VENDOR_DB_PATH = "/tmp/device-vendors.txt"
 STATE_FILE = "/tmp/network_scanner_state.json"
+VERSION_CACHE_FILE = "/tmp/version_cache.json"
+VERSION_CHECK_INTERVAL = 3600  # Check for updates every hour
 BYTE_LIMIT = int(os.getenv("BYTE_LIMIT", "2000"))
 PLUGIN_UUID = os.getenv("PLUGIN_UUID", "")
 INTERVAL = int(os.getenv("INTERVAL", "15"))
 NETWORK = os.getenv("NETWORK", "")
 OFFLINE_RETENTION = int(os.getenv("OFFLINE_RETENTION", "1440"))  # Default 24 hours in minutes
+ENABLE_PORT_SCAN = os.getenv("ENABLE_PORT_SCAN", "false").lower() in ['true', '1', 'yes']
+PORT_SCAN_PORTS = os.getenv("PORT_SCAN_PORTS", "22,80,443,8080,3389,5900,9000")  # Default common ports
 
 
 class Colors:
@@ -57,6 +64,83 @@ def download_vendor_db():
         Path(VENDOR_DB_PATH).touch()
 
 
+def get_current_version() -> str:
+    """Get current version from local version.json"""
+    try:
+        local_version_file = Path(__file__).parent / 'version.json'
+        if local_version_file.exists():
+            with open(local_version_file, 'r') as f:
+                version_data = json.load(f)
+
+            if 'versions' in version_data and len(version_data['versions']) > 0:
+                return version_data['versions'][0]['version']
+    except Exception as e:
+        log(f"Could not read local version.json: {e}", Colors.YELLOW)
+
+    # Fallback to hardcoded version
+    return CURRENT_VERSION
+
+
+def get_latest_version() -> Optional[str]:
+    """Fetch latest version from GitHub using repo/branch from local version.json"""
+    try:
+        # Check cache first
+        if Path(VERSION_CACHE_FILE).exists():
+            try:
+                with open(VERSION_CACHE_FILE, 'r') as f:
+                    cache = json.load(f)
+                    cache_time = cache.get('timestamp', 0)
+                    if time.time() - cache_time < VERSION_CHECK_INTERVAL:
+                        return cache.get('latest_version')
+            except:
+                pass
+
+        # Get repo and branch from local version.json
+        local_version_file = Path(__file__).parent / 'version.json'
+        if not local_version_file.exists():
+            log("No local version.json - skipping version check", Colors.YELLOW)
+            return None
+
+        with open(local_version_file, 'r') as f:
+            version_data = json.load(f)
+
+        repo = version_data.get('repo')
+        branch = version_data.get('branch')
+
+        if not repo or not branch:
+            log("No repo/branch in version.json - skipping version check", Colors.YELLOW)
+            return None
+
+        # Fetch from GitHub
+        version_url = f"https://raw.githubusercontent.com/{repo}/refs/heads/{branch}/version.json"
+
+        log(f"Checking for updates from {repo} ({branch})...", Colors.BLUE)
+        response = requests.get(version_url, timeout=10)
+        response.raise_for_status()
+
+        remote_version_data = response.json()
+
+        if 'versions' in remote_version_data and len(remote_version_data['versions']) > 0:
+            latest_version = remote_version_data['versions'][0]['version']
+
+            # Cache the result
+            try:
+                with open(VERSION_CACHE_FILE, 'w') as f:
+                    json.dump({
+                        'latest_version': latest_version,
+                        'timestamp': time.time()
+                    }, f)
+            except:
+                pass
+
+            return latest_version
+
+    except Exception as e:
+        log(f"Failed to fetch latest version: {e}", Colors.YELLOW)
+
+    return None
+
+
 def lookup_vendor(mac: str) -> str:
     """Look up vendor by MAC address OUI"""
     if not mac:
@@ -87,6 +171,71 @@ def lookup_vendor(mac: str) -> str:
     except Exception as e:
         log(f"Error looking up vendor for {mac}: {e}", Colors.RED)
         return ""
+
+
+def scan_ports(ip: str, ports: List[int]) -> List[int]:
+    """Scan specified ports on an IP address"""
+    open_ports = []
+
+    if not ports:
+        return open_ports
+
+    try:
+        # Use nmap for port scanning (faster and more reliable than socket connections)
+        port_arg = ','.join(str(p) for p in ports)
+        result = subprocess.run(
+            ['nmap', '-p', port_arg, '-T4', '--max-retries', '1', '--host-timeout', '5s', ip],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        # Parse nmap output for open ports
+        for line in result.stdout.split('\n'):
+            # Look for lines like "22/tcp   open  ssh"
+            match = re.match(r'(\d+)/tcp\s+open', line)
+            if match:
+                port = int(match.group(1))
+                open_ports.append(port)
+
+        if open_ports:
+            log(f"  Found open ports on {ip}: {', '.join(str(p) for p in open_ports)}", Colors.GREEN)
+
+    except subprocess.TimeoutExpired:
+        log(f"  Port scan timeout for {ip}", Colors.YELLOW)
+    except Exception as e:
+        log(f"  Error scanning ports on {ip}: {e}", Colors.RED)
+
+    return open_ports
+
+
+def get_port_list() -> List[int]:
+    """Parse the PORT_SCAN_PORTS configuration into a list of ports"""
+    if PORT_SCAN_PORTS.strip().lower() == 'all':
+        # Scan all 65535 ports (this will be VERY slow)
+        return list(range(1, 65536))
+
+    ports = []
+    try:
+        for part in PORT_SCAN_PORTS.split(','):
+            part = part.strip()
+            if '-' in part:
+                # Handle range like "80-90"
+                start, end = part.split('-')
+                ports.extend(range(int(start), int(end) + 1))
+            else:
+                # Single port
+                ports.append(int(part))
+
+        # Remove duplicates and sort
+        ports = sorted(set(ports))
+
+    except ValueError as e:
+        log(f"Invalid port configuration: {e}. Using default ports.", Colors.RED)
+        # Default fallback
+        ports = [22, 80, 443, 8080, 3389, 5900, 9000]
+
+    return ports
 
 
 def resolve_hostname(ip: str, state: Dict) -> str:
@@ -136,10 +285,11 @@ def resolve_hostname(ip: str, state: Dict) -> str:
     return hostname
 
 
-def detect_device_type(hostname: str, vendor: str) -> str:
-    """Detect device type based on hostname and vendor"""
+def detect_device_type(hostname: str, vendor: str, open_ports: List[int] = None) -> str:
+    """Detect device type based on hostname, vendor, and open ports"""
     h = hostname.lower()
     v = vendor.lower()
+    ports = open_ports or []
 
     # Check for Android/iOS device patterns first (before checking vendor)
     # These devices often use MAC randomization, so vendor might be "locally administered"
@@ -147,6 +297,19 @@ def detect_device_type(hostname: str, vendor: str) -> str:
            ['android', 'phone', 'mobile', 'tablet', 'ipad', 'iphone', 'galaxy', 'pixel', 'oneplus', 'xiaomi', 'oppo',
             'vivo', 'realme', 'samsung-', 'huawei']):
         return "Mobile Device"
+
+    # Port-based detection (checked early as it's very reliable)
+    if 3389 in ports:  # RDP
+        return "Windows Computer"
+    if 5900 in ports:  # VNC
+        return "Computer (VNC)"
+    if 22 in ports and (80 in ports or 443 in ports):
+        # SSH + web suggests server/router
+        if any(x in v for x in ['tp-link', 'netgear', 'linksys', 'asus', 'ubiquiti', 'd-link']):
+            return "Router"
+        return "Server"
+    if 631 in ports:  # IPP (Internet Printing Protocol)
+        return "Printer"
 
     # Routers and Network Equipment
     if any(x in v for x in ['tp-link', 'netgear', 'linksys', 'asus', 'ubiquiti', 'unifi', 'd-link', 'sagemcom']):
@@ -302,9 +465,10 @@ def scan_nmap() -> List[Dict]:
         network = NETWORK if NETWORK else auto_detect_network()
         log(f"Running nmap on {network}", Colors.BLUE)
 
-        result = subprocess.run(['nmap', '-sn', '-R', '--system-dns', '-T4',
+        # Reduced timeout and more aggressive settings for faster scans
+        result = subprocess.run(['nmap', '-sn', '-T5', '--host-timeout', '10s',
                                  '--max-retries', '1', network],
-                                capture_output=True, text=True, timeout=120)
+                                capture_output=True, text=True, timeout=60)
 
         current_device = {}
 
@@ -345,6 +509,8 @@ def scan_nmap() -> List[Dict]:
             devices.append(current_device)
 
         log(f"nmap found {len(devices)} devices", Colors.GREEN)
+    except subprocess.TimeoutExpired:
+        log(f"nmap timed out (skipping)", Colors.YELLOW)
     except Exception as e:
         log(f"nmap failed: {e}", Colors.YELLOW)
 
@@ -379,20 +545,33 @@ def perform_scan() -> List[Dict]:
     all_devices = {}
 
     # Try arp-scan first (faster and more reliable for local network)
-    for device in scan_arp():
+    arp_devices = scan_arp()
+    for device in arp_devices:
         key = device['mac'] or device['ip']
         all_devices[key] = device
 
-    # Fill in gaps with nmap
-    for device in scan_nmap():
-        key = device.get('mac') or device['ip']
-        if key not in all_devices:
-            all_devices[key] = device
-        elif not all_devices[key].get('mac') and device.get('mac'):
-            # Update with MAC if we didn't have one
-            all_devices[key].update(device)
+    # Only run nmap if arp-scan found fewer than 5 devices or to fill in missing MACs
+    # This saves time on subsequent scans
+    if len(arp_devices) < 5 or any(not d.get('mac') for d in arp_devices):
+        log("Running nmap to fill in gaps...", Colors.BLUE)
+        for device in scan_nmap():
+            key = device.get('mac') or device['ip']
+            if key not in all_devices:
+                all_devices[key] = device
+            elif not all_devices[key].get('mac') and device.get('mac'):
+                # Update with MAC if we didn't have one
+                all_devices[key].update(device)
+    else:
+        log("Skipping nmap (arp-scan found sufficient devices)", Colors.BLUE)
 
-    # Resolve hostnames and detect device types
+    # Get port list if port scanning is enabled
+    ports_to_scan = []
+    if ENABLE_PORT_SCAN:
+        ports_to_scan = get_port_list()
+        log(f"Port scanning enabled for {len(ports_to_scan)} ports: {ports_to_scan[:10]}{'...' if len(ports_to_scan) > 10 else ''}",
+            Colors.BLUE)
+
+    # Resolve hostnames, scan ports, and detect device types
     devices = []
     for device in all_devices.values():
         ip = device['ip']
@@ -404,8 +583,13 @@ def perform_scan() -> List[Dict]:
         if not hostname or hostname == ip:
             hostname = resolve_hostname(ip, state)
 
-        # Detect device type
-        device_type = detect_device_type(hostname, vendor)
+        # Scan ports if enabled
+        open_ports = []
+        if ENABLE_PORT_SCAN and ports_to_scan:
+            open_ports = scan_ports(ip, ports_to_scan)
+
+        # Detect device type (now with port information)
+        device_type = detect_device_type(hostname, vendor, open_ports)
 
         # Add local MAC if missing
         if not mac:
@@ -418,7 +602,8 @@ def perform_scan() -> List[Dict]:
             'hostname': hostname,
             'mac': mac,
             'vendor': vendor,  # Can be empty string
-            'type': device_type
+            'type': device_type,
+            'ports': open_ports  # Store open ports
         })
 
     # Sort by IP
@@ -485,7 +670,10 @@ def send_to_trmnl(devices: List[Dict]):
         # Don't send hostname if same as IP (save bytes)
         hostname = device['hostname'] if device['hostname'] != device['ip'] else ''
 
-        device_str = f"{device['ip']}|{hostname}|{device['mac']}|{vendor}|{device['type']}|{current_timestamp}"
+        # Format ports as comma-separated string (e.g., "22,80,443")
+        ports_str = ','.join(str(p) for p in device.get('ports', [])) if device.get('ports') else ''
+
+        device_str = f"{device['ip']}|{hostname}|{device['mac']}|{vendor}|{device['type']}|{current_timestamp}|{ports_str}"
         devices_list.append(device_str)
 
         current_map[identifier] = {
@@ -494,7 +682,8 @@ def send_to_trmnl(devices: List[Dict]):
             'hostname': device['hostname'],
             'mac': device['mac'],
             'vendor': vendor,
-            'type': device['type']
+            'type': device['type'],
+            'ports': device.get('ports', [])
         }
 
     offline_devices = []
@@ -520,6 +709,7 @@ def send_to_trmnl(devices: List[Dict]):
                 data.get('mac'),
                 vendor,
                 data.get('type', ''),
+                data.get('ports', []),
                 identifier,
                 data  # Keep the full data for logging
             ))
@@ -529,8 +719,9 @@ def send_to_trmnl(devices: List[Dict]):
 
     # Now process sorted devices
     offline_count = len(offline_devices)
-    for last_seen, ip, hostname, mac, vendor, device_type, identifier, data in offline_devices:
-        device_str = f"{ip}|{hostname}|{mac}|{vendor}|{device_type}|{last_seen}"
+    for last_seen, ip, hostname, mac, vendor, device_type, ports, identifier, data in offline_devices:
+        ports_str = ','.join(str(p) for p in ports) if ports else ''
+        device_str = f"{ip}|{hostname}|{mac}|{vendor}|{device_type}|{last_seen}|{ports_str}"
         devices_list.append(device_str)
 
         age_minutes = (current_timestamp - last_seen) // 60
@@ -564,12 +755,24 @@ def send_to_trmnl(devices: List[Dict]):
     log(f"Saving merged state with {len(merged_state)} total devices", Colors.GREEN)
     save_state(merged_state)
 
-    # Build payload
+    # Get version string with timestamp
     timestamp = datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+    current_version = get_current_version()
+    latest_version = get_latest_version()
+
+    # Build version string: current|latest|timestamp
+    version_string = f"{current_version}|{latest_version or ''}|{timestamp}"
+
+    if latest_version and latest_version != current_version:
+        log(f"⚠ Update available: {current_version} → {latest_version}", Colors.YELLOW)
+    elif latest_version:
+        log(f"✓ Running latest version: {current_version}", Colors.GREEN)
+
+    # Build payload
     payload = {
         'merge_variables': {
             'devices_list': devices_list,
-            'last_scan': timestamp
+            'v': version_string
         }
     }
 
@@ -583,8 +786,8 @@ def send_to_trmnl(devices: List[Dict]):
         log(f"Payload exceeds limit ({payload_size} > {BYTE_LIMIT}), truncating...", Colors.YELLOW)
 
         # Separate online and offline
-        online = [d for d in devices_list if int(d.split('|')[-1]) >= current_timestamp - 600]
-        offline = [d for d in devices_list if int(d.split('|')[-1]) < current_timestamp - 600]
+        online = [d for d in devices_list if int(d.split('|')[5]) >= current_timestamp - 600]
+        offline = [d for d in devices_list if int(d.split('|')[5]) < current_timestamp - 600]
 
         log(f"Online devices: {len(online)}, Offline devices: {len(offline)}", Colors.YELLOW)
 
@@ -594,7 +797,7 @@ def send_to_trmnl(devices: List[Dict]):
             test_payload = json.dumps({
                 'merge_variables': {
                     'devices_list': truncated + [device_str],
-                    'last_scan': timestamp
+                    'v': version_string
                 }
             })
 
@@ -606,7 +809,7 @@ def send_to_trmnl(devices: List[Dict]):
         payload = {
             'merge_variables': {
                 'devices_list': truncated,
-                'last_scan': timestamp,
+                'v': version_string,
                 'truncated': True
             }
         }
@@ -636,19 +839,38 @@ def send_to_trmnl(devices: List[Dict]):
 
 
 def main():
+    current_version = get_current_version()
+
     print(f"{Colors.BLUE}========================================{Colors.NC}")
     print(f"{Colors.BLUE} Network Scanner with TRMNL{Colors.NC}")
+    print(f"{Colors.BLUE} Version: {current_version}{Colors.NC}")
     print(f"{Colors.BLUE}========================================{Colors.NC}")
     print()
 
     # Download vendor database
     download_vendor_db()
 
+    # Check for updates
+    latest_version = get_latest_version()
+    if latest_version:
+        if latest_version != current_version:
+            log(f"⚠ Update available: {current_version} → {latest_version}", Colors.YELLOW)
+        else:
+            log(f"✓ Running latest version: {current_version}", Colors.GREEN)
+
     if PLUGIN_UUID:
         log("TRMNL mode ENABLED", Colors.GREEN)
         log(f"Scan interval: {INTERVAL} minutes", Colors.GREEN)
     else:
         log("TRMNL mode DISABLED (single scan)", Colors.YELLOW)
+
+    if ENABLE_PORT_SCAN:
+        ports = get_port_list()
+        log(f"Port scanning ENABLED ({len(ports)} ports)", Colors.GREEN)
+        if len(ports) <= 20:
+            log(f"Ports: {', '.join(str(p) for p in ports)}", Colors.GREEN)
+    else:
+        log("Port scanning DISABLED", Colors.YELLOW)
 
     scan_count = 0
 
@@ -660,7 +882,9 @@ def main():
 
         # Print results
         for device in devices:
-            print(f" • {device['hostname']} ({device['ip']}) - {device['mac']} [{device['vendor']}] - {device['type']}")
+            ports_display = f" [Ports: {','.join(str(p) for p in device['ports'])}]" if device.get('ports') else ""
+            print(
+                f" • {device['hostname']} ({device['ip']}) - {device['mac']} [{device['vendor']}] - {device['type']}{ports_display}")
 
         if not PLUGIN_UUID:
             log("Single scan complete.", Colors.GREEN)

@@ -17,6 +17,9 @@ WORKDIR /app
 
 COPY scan.py /app/scan.py
 
+# Copy version.json if it exists (optional - won't fail if missing)
+COPY version.json /app/
+
 RUN chmod +x /app/scan.py
 
 ENTRYPOINT ["python3", "/app/scan.py"]
