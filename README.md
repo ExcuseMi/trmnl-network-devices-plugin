@@ -36,6 +36,25 @@ NETWORK=192.168.1.0/24
 # These offline devices will still be sent to the TRMNL plugin until the OFFLINE RETENTION is reached.
 # Examples: 60 (1 hour), 180 (3 hours), 720 (12 hours), 1440 (24 hours)
 OFFLINE_RETENTION=1440
+# Enable port scanning (default: false)
+# Set to true, 1, or yes to enable
+ENABLE_PORT_SCAN=false
+# Ports to scan (comma-separated list or ranges, default: common ports)
+# Default: 22,80,443,8080,3389,5900,9000
+# Common ports explained:
+#   22    - SSH
+#   80    - HTTP
+#   443   - HTTPS
+#   8080  - HTTP alternate
+#   3389  - RDP (Remote Desktop)
+#   5900  - VNC
+#   9000  - Various services
+#
+# Examples:
+#   PORT_SCAN_PORTS=22,80,443,8080,3389,5900,9000  (default common ports)
+#   PORT_SCAN_PORTS=20-25,80,443,3389,8000-8100     (ranges supported)
+#   PORT_SCAN_PORTS=all                             (scan all 65535 ports - VERY SLOW!)
+PORT_SCAN_PORTS=22,80,443,8080,3389,5900,9000
 ```
                                 
 ## Updating
@@ -47,6 +66,9 @@ docker-compose down
 docker-compose build --no-cache
 docker-compose up -d
 ```
+
+After updating, review .env.example and compare it with your existing .env file. Add or adjust any new configuration options as needed.
+
 ## How It Works
 
 The network scanner uses two complementary methods to discover devices:
