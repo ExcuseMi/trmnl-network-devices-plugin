@@ -40,7 +40,6 @@ assign show_offline_devices = trmnl.plugin_settings.custom_fields_values.show_of
 assign show_ports = trmnl.plugin_settings.custom_fields_values.show_ports | default: "no"
 assign port_display_mode = trmnl.plugin_settings.custom_fields_values.port_display_mode | default: "both"
 assign port_labels = trmnl.plugin_settings.custom_fields_values.port_labels
-assign show_update_notification = trmnl.plugin_settings.custom_fields_values.show_update_notification | default: "yes"
 
 assign v_string = v | default: ""
 assign v_parts = v_string | split: "|"
@@ -50,11 +49,6 @@ assign scan_timestamp = v_parts[2] | default: "" | plus: 0
 
 if scan_timestamp == 0
   assign scan_timestamp = trmnl.system.timestamp_utc | minus: 600
-endif
-
-assign has_update = false
-if current_version != "" and latest_version != "" and current_version != latest_version and show_update_notification == "yes"
-  assign has_update = true
 endif
 
 %}
@@ -458,7 +452,7 @@ endif
 </div>
 <div class="title_bar">
   <img class="image image-stroke" src="https://github.com/ExcuseMi/trmnl-network-devices-plugin/blob/main/images/home_network.png?raw=true" />
-  <span class="title">Network devices{% if current_version != "" %} {{ current_version }}{% else %} v1.0{% endif %}</span>
+  <span class="title">Network devices</span>
   {% if has_update %} <span class="image image-stroke material-symbols-outlined">system_update_alt</span>{% endif %}
   <span class="instance flex flex--row flex--right">
     {% if online_devices_count > 0 %}

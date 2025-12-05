@@ -4,7 +4,7 @@
   "versions": [
     {
       "version": "v1.1",
-      "changelog": "Add port scanning and version checking"
+      "changelog": "<strong>Added port scanning.</strong><br />Update your network-scanner and enable the .env properties (see the updated .env.axample )"
     }
   ]
 }

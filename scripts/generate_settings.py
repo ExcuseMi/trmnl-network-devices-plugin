@@ -62,7 +62,7 @@ def generate_settings():
             'keyname': 'author_info',
             'name': 'About This Plugin',
             'field_type': 'author_bio',
-            'description': f"""Keep tabs on every device connected to your home or office network with automatic discovery, smart categorization, and real-time status tracking. Network Devices scans your local network, identifies devices by vendor and type, and displays them with intuitive icons on your TRMNL.<br /><br />Features:<br />• Automatic device detection via arp-scan and nmap<br />• Smart vendor identification from MAC addresses<br />• Offline tracking - see when devices disconnect<br />• Port scanning with customizable labels<br />• Customizable names, icons, and device types<br />• Clean, modern interface with Material Symbols icons<br />• Update notifications<br /><br />Requires a Docker container running on your network (5 min setup). Perfect for monitoring IoT devices, tracking network usage, or keeping an eye on who's connected.<br /><br />{changelog_html}""",
+            'description': f"""Keep tabs on every device connected to your home or office network with automatic discovery, smart categorization, and real-time status tracking. Network Devices scans your local network, identifies devices by vendor and type, and displays them with intuitive icons on your TRMNL.<br /><br />Features:<br />• Automatic device detection via arp-scan and nmap<br />• Smart vendor identification from MAC addresses<br />• Offline tracking - see when devices disconnect<br />• Port scanning with customizable labels<br />• Customizable names, icons, and device types<br />• Clean, modern interface with Material Symbols icons<br /><br />Requires a Docker container running on your network (5 min setup). Perfect for monitoring IoT devices, tracking network usage, or keeping an eye on who's connected.<br /><br />{changelog_html}""",
             'github_url': 'https://github.com/ExcuseMi/trmnl-network-devices-plugin',
             'category': 'analytics'
         },
@@ -98,19 +98,6 @@ def generate_settings():
             ],
             'default': 'no',
             'help_text': 'Useful for identifying devices to configure in Device Configuration above. MAC addresses appear as a third line below the device name and type.',
-            'optional': True
-        },
-        {
-            'keyname': 'show_update_notification',
-            'field_type': 'select',
-            'name': 'Show Update Notification',
-            'description': 'Show notification when a new version is available',
-            'options': [
-                {'Yes - Show update notification': 'yes'},
-                {'No - Hide update notification': 'no'}
-            ],
-            'default': 'yes',
-            'help_text': 'When enabled, a small indicator appears in the title bar when a new version of the plugin is released.',
             'optional': True
         },
         {
