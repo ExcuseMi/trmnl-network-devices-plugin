@@ -180,34 +180,65 @@ def scan_ports(ip: str, ports: List[int]) -> List[int]:
     if not ports:
         return open_ports
 
-    try:
-        # Use nmap for port scanning (faster and more reliable than socket connections)
-        port_arg = ','.join(str(p) for p in ports)
-        result = subprocess.run(
-            ['nmap', '-p', port_arg, '-T4', '--max-retries', '1', '--host-timeout', '5s', ip],
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
+    # Don't scan too many ports at once
+    if len(ports) > 20:
+        log(f"  Too many ports ({len(ports)}) to scan for {ip}, limiting to first 20", Colors.YELLOW)
+        ports = ports[:20]
 
-        # Parse nmap output for open ports
-        for line in result.stdout.split('\n'):
-            # Look for lines like "22/tcp   open  ssh"
-            match = re.match(r'(\d+)/tcp\s+open', line)
-            if match:
-                port = int(match.group(1))
-                open_ports.append(port)
+    try:
+        # Method 1: Try nmap first (faster)
+        try:
+            port_arg = ','.join(str(p) for p in ports)
+            result = subprocess.run(
+                ['nmap', '-p', port_arg, '-T4', '--max-retries', '1', '--host-timeout', '10s', '-Pn', ip],
+                capture_output=True,
+                text=True,
+                timeout=45
+            )
+
+            # Parse nmap output for open ports
+            for line in result.stdout.split('\n'):
+                match = re.match(r'(\d+)/tcp\s+open', line)
+                if match:
+                    port = int(match.group(1))
+                    open_ports.append(port)
+
+            if open_ports:
+                log(f"  Found open ports on {ip}: {', '.join(str(p) for p in open_ports)}", Colors.GREEN)
+                return open_ports
+
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            # Nmap timed out or not installed, fall back to socket scan
+            if isinstance(e, FileNotFoundError):
+                log(f"  nmap not installed, using socket fallback", Colors.YELLOW)
+            else:
+                log(f"  nmap timeout for {ip}, using socket fallback", Colors.YELLOW)
+
+        # Method 2: Socket fallback - FIXED VERSION
+        log(f"  Scanning {len(ports)} ports on {ip} with socket...", Colors.BLUE)
+
+        for port in ports:
+            try:
+                # Create a new socket for each connection
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(0.5)  # 500ms timeout per port
+                result = sock.connect_ex((ip, port))
+                sock.close()
+
+                if result == 0:
+                    open_ports.append(port)
+                    log(f"  Found open port {port} on {ip}", Colors.GREEN)
+            except Exception as e:
+                # Silently fail for connection errors
+                pass
 
         if open_ports:
-            log(f"  Found open ports on {ip}: {', '.join(str(p) for p in open_ports)}", Colors.GREEN)
+            log(f"  Socket scan found open ports on {ip}: {', '.join(str(p) for p in open_ports)}", Colors.GREEN)
 
-    except subprocess.TimeoutExpired:
-        log(f"  Port scan timeout for {ip}", Colors.YELLOW)
     except Exception as e:
         log(f"  Error scanning ports on {ip}: {e}", Colors.RED)
 
     return open_ports
-
 
 def get_port_list() -> List[int]:
     """Parse the PORT_SCAN_PORTS configuration into a list of ports"""
@@ -417,6 +448,26 @@ def get_local_mac(ip: str) -> Optional[str]:
         return None
 
 
+def get_host_ip(interface: str) -> Optional[str]:
+    """Get IP address of the host on the specified interface"""
+    try:
+        result = subprocess.run(['ip', '-4', 'addr', 'show', interface],
+                               capture_output=True, text=True, timeout=5)
+        match = re.search(r'inet (\d+\.\d+\.\d+\.\d+)', result.stdout)
+        return match.group(1) if match else None
+    except:
+        return None
+
+def get_host_mac(interface: str) -> Optional[str]:
+    """Get MAC address of the host on the specified interface"""
+    try:
+        result = subprocess.run(['ip', 'link', 'show', interface],
+                               capture_output=True, text=True, timeout=5)
+        match = re.search(r'link/ether ([0-9a-f:]+)', result.stdout, re.IGNORECASE)
+        return match.group(1).upper() if match else None
+    except:
+        return None
+
 def scan_arp() -> List[Dict]:
     """Scan network using arp-scan"""
     devices = []
@@ -450,12 +501,25 @@ def scan_arp() -> List[Dict]:
                     'vendor': vendor  # Can be empty string
                 })
 
+        # Add the host itself (the machine running the scan)
+        host_ip = get_host_ip(interface)
+        host_mac = get_host_mac(interface)
+        if host_ip and host_mac:
+            # Check if we already added this host (shouldn't happen, but just in case)
+            if not any(d['ip'] == host_ip for d in devices):
+                host_vendor = lookup_vendor(host_mac) or ""
+                devices.append({
+                    'ip': host_ip,
+                    'mac': host_mac,
+                    'vendor': host_vendor
+                })
+                log(f"Added local host: {host_ip} ({host_mac})", Colors.BLUE)
+
         log(f"arp-scan found {len(devices)} devices", Colors.GREEN)
     except Exception as e:
         log(f"arp-scan failed: {e}", Colors.YELLOW)
 
     return devices
-
 
 def scan_nmap() -> List[Dict]:
     """Scan network using nmap"""
