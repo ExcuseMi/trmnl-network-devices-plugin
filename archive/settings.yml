@@ -1,3 +1,4 @@
+---
 strategy: webhook
 no_screen_padding: 'no'
 dark_mode: 'no'
@@ -23,7 +24,8 @@ custom_fields:
     IoT devices, tracking network usage, or keeping an eye on who's connected.<br
     /><br /><strong>Changelog:</strong><br />• <strong>v1.1:</strong> <strong>Added
     port scanning.</strong><br />Update your network-scanner and enable the .env properties
-    (see the updated .env.axample )<br />
+    (see the updated .env.axample )<br />• <strong>v1.2:</strong> <strong>Added the
+    scanner device.</strong><br />
   github_url: https://github.com/ExcuseMi/trmnl-network-devices-plugin
   category: analytics
 - keyname: device_identifiers
@@ -124,4 +126,4 @@ custom_fields:
     <code>ports</code> field.
   optional: true
 name: Network Devices v1.1
-refresh_interval: 5
+refresh_interval: 15

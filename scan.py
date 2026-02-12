@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 # Version
-CURRENT_VERSION = "v1.1"
+CURRENT_VERSION = "v1.2"
 
 # Configuration
 VENDOR_DB_URL = "https://www.wireshark.org/download/automated/data/manuf"

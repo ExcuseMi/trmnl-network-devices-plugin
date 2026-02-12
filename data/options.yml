@@ -11,9 +11,10 @@
     types<br />• Clean, modern interface with Material Symbols icons<br /><br />Requires
     a Docker container running on your network (5 min setup). Perfect for monitoring
     IoT devices, tracking network usage, or keeping an eye on who's connected.<br
-    /><br /><strong>Changelog:</strong><br />• <strong>v1.1:</strong> <strong>Added
-    port scanning.</strong><br />Update your network-scanner and enable the .env properties
-    (see the updated .env.axample )<br />
+    /><br /><strong>Changelog:</strong><br />• <strong>v1.2:</strong> <strong>Added
+    the device running the network-scanner in the report.</strong><br />• <strong>v1.1:</strong>
+    <strong>Added port scanning.</strong><br />Update your network-scanner and enable
+    the .env properties (see the updated .env.axample )<br />
   github_url: https://github.com/ExcuseMi/trmnl-network-devices-plugin
   category: analytics
 - keyname: device_identifiers

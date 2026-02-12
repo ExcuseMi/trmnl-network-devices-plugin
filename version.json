@@ -1,7 +1,11 @@
 {
   "repo": "ExcuseMi/trmnl-network-devices-plugin",
-  "branch": "portscan",
+  "branch": "main",
   "versions": [
+        {
+      "version": "v1.2",
+      "changelog": "<strong>Added the device running the network-scanner in the report.</strong>"
+    },
     {
       "version": "v1.1",
       "changelog": "<strong>Added port scanning.</strong><br />Update your network-scanner and enable the .env properties (see the updated .env.axample )"
