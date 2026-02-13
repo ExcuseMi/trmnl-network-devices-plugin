@@ -88,7 +88,7 @@ def main():
     # Download archive
     download_file = archive_dir / "download.zip"
     response = requests.get(
-        f"https://usetrmnl.com/api/plugin_settings/{download_id}/archive",
+        f"https://trmnl.com/api/plugin_settings/{download_id}/archive",
         headers={"Authorization": f"Bearer {api_key}"}
     )
 
@@ -222,7 +222,7 @@ def main():
     with open(upload_file, 'rb') as f:
         files = {'file': ('archive.zip', f, 'application/zip')}
         response = requests.post(
-            f"https://usetrmnl.com/api/plugin_settings/{recipe_id}/archive",
+            f"https://trmnl.com/api/plugin_settings/{recipe_id}/archive",
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "User-Agent": "trmnl-sync-script"
@@ -232,7 +232,7 @@ def main():
 
     if response.status_code == 200:
         log("✓ Upload successful!\n", Colors.GREEN)
-        log(f"Dashboard: https://usetrmnl.com/plugin_settings/{recipe_id}/edit\n", Colors.GREEN)
+        log(f"Dashboard: https://trmnl.com/plugin_settings/{recipe_id}/edit\n", Colors.GREEN)
 
         # Clean up
         log("Cleaning up...", Colors.YELLOW)

@@ -888,7 +888,7 @@ def send_to_trmnl(devices: List[Dict]):
 
     # Send to webhook
     try:
-        webhook_url = f"https://usetrmnl.com/api/custom_plugins/{PLUGIN_UUID}"
+        webhook_url = f"https://trmnl.com/api/custom_plugins/{PLUGIN_UUID}"
         response = requests.post(webhook_url, json=payload, timeout=30)
 
         if response.status_code in [200, 201]:

@@ -41,7 +41,7 @@ echo ""
 
 # Upload the archive
 RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-    "https://usetrmnl.com/api/plugin_settings/${PLUGIN_SETTINGS_ID}/archive" \
+    "https://trmnl.com/api/plugin_settings/${PLUGIN_SETTINGS_ID}/archive" \
     -H "Authorization: Bearer ${TRMNL_API_KEY}" \
     -H "User-Agent: trmnl-upload-script" \
     -F "file=@${ZIP_FILE}")
@@ -57,7 +57,7 @@ if [ "$HTTP_CODE" -eq 200 ]; then
     echo "Response:"
     echo "$BODY" | python3 -m json.tool 2>/dev/null || echo "$BODY"
     echo ""
-    echo -e "${GREEN}Dashboard: https://usetrmnl.com/plugin_settings/${PLUGIN_SETTINGS_ID}/edit${NC}"
+    echo -e "${GREEN}Dashboard: https://trmnl.com/plugin_settings/${PLUGIN_SETTINGS_ID}/edit${NC}"
 else
     echo -e "${RED}✗ Upload failed with HTTP ${HTTP_CODE}${NC}"
     echo ""

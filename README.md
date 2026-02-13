@@ -136,7 +136,7 @@ MIT
 *Last updated: 2026-02-12 06:44:56 UTC*
 
 
-## <img src="assets/plugin-images/189338_icon.png" alt="Network Devices v1.1 icon" width="32"/> [Network Devices v1.1](https://usetrmnl.com/recipes/189338)
+## <img src="assets/plugin-images/189338_icon.png" alt="Network Devices v1.1 icon" width="32"/> [Network Devices v1.1](https://trmnl.com/recipes/189338)
 
 ![Network Devices v1.1 screenshot](assets/plugin-images/189338_screenshot.png)
 
