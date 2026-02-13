@@ -2,7 +2,10 @@
 {% assign show_headers = false %}
 
 {% render "devices", 
-max_columns:max_columns, 
+max_columns:max_columns,
+lg_columns: max_columns,
+portrait_columns: 1,
+lg_portrait_columns: 2,
 v:v,
 devices_list: devices_list, 
 show_headers:show_headers,

@@ -58,7 +58,7 @@ endif
   {% comment %} Parse all devices into JSON objects first {% endcomment %}
   {% assign current_time = trmnl.system.timestamp_utc %}
   {% assign all_devices_json = "[" %}
-  
+
   {% for device_line in devices_list %}
   {% unless device_line == "" %}
   {% assign parts = device_line | split: "|" %}
@@ -69,48 +69,48 @@ endif
   {% assign device_type = parts[4] %}
   {% assign last_seen_ts = parts[5] | default: "" %}
   {% assign device_ports = parts[6] | default: "" %}
-  
+
   {% comment %} Calculate offline status {% endcomment %}
   {% assign last_seen_num = last_seen_ts | plus: 0 %}
   {% if last_seen_num <= 0 %}
     {% assign last_seen_num = current_time | plus: last_seen_num %}
   {% endif %}
-  
+
   {% comment %} Device is offline if last_seen is before scan_timestamp {% endcomment %}
   {% assign is_offline = false %}
   {% if last_seen_num < scan_timestamp %}
     {% assign is_offline = true %}
   {% endif %}
   {% assign time_diff = current_time | minus: last_seen_num %}
-  
+
   {% comment %} Create sortable IP {% endcomment %}
   {% assign ip_parts = device_ip | split: "." %}
   {% assign octet1 = ip_parts[0] | plus: 0 %}
   {% assign octet2 = ip_parts[1] | plus: 0 %}
   {% assign octet3 = ip_parts[2] | plus: 0 %}
   {% assign octet4 = ip_parts[3] | plus: 0 %}
-  
+
   {% if octet1 < 10 %}{% assign octet1_str = "00" | append: octet1 %}{% elsif octet1 < 100 %}{% assign octet1_str = "0" | append: octet1 %}{% else %}{% assign octet1_str = octet1 | append: "" %}{% endif %}
   {% if octet2 < 10 %}{% assign octet2_str = "00" | append: octet2 %}{% elsif octet2 < 100 %}{% assign octet2_str = "0" | append: octet2 %}{% else %}{% assign octet2_str = octet2 | append: "" %}{% endif %}
   {% if octet3 < 10 %}{% assign octet3_str = "00" | append: octet3 %}{% elsif octet3 < 100 %}{% assign octet3_str = "0" | append: octet3 %}{% else %}{% assign octet3_str = octet3 | append: "" %}{% endif %}
   {% if octet4 < 10 %}{% assign octet4_str = "00" | append: octet4 %}{% elsif octet4 < 100 %}{% assign octet4_str = "0" | append: octet4 %}{% else %}{% assign octet4_str = octet4 | append: "" %}{% endif %}
-  
+
   {% assign sortable_ip = octet1_str | append: "." | append: octet2_str | append: "." | append: octet3_str | append: "." | append: octet4_str %}
-  
+
   {% comment %} Build JSON object {% endcomment %}
   {% if forloop.index0 > 0 %}{% assign all_devices_json = all_devices_json | append: "," %}{% endif %}
   {% capture device_json %}{"ip":"{{ device_ip }}","hostname":"{{ device_hostname }}","mac":"{{ device_mac }}","vendor":"{{ device_vendor }}","type":"{{ device_type }}","ports":"{{ device_ports }}","is_offline":{{ is_offline }},"time_diff":{{ time_diff }},"sortable_ip":"{{ sortable_ip }}"}{% endcapture %}
   {% assign all_devices_json = all_devices_json | append: device_json %}
   {% endunless %}
   {% endfor %}
-  
+
   {% assign all_devices_json = all_devices_json | append: "]" %}
   {% assign all_devices = all_devices_json | parse_json %}
-  
+
   {% comment %} Separate into online and offline arrays {% endcomment %}
   {% assign online_with_sort = "" %}
   {% assign offline_with_sort = "" %}
-  
+
   {% for device in all_devices %}
   {% if device.is_offline %}
     {% if show_offline_devices == "yes" %}
@@ -128,7 +128,7 @@ endif
       {% elsif time_diff_num < 1000000000 %}{% assign sortable_time = "0" | append: time_diff_num %}
       {% else %}{% assign sortable_time = time_diff_num | append: "" %}
       {% endif %}
-      
+
       {% assign sortable_entry = sortable_time | append: "|||" | append: forloop.index0 %}
       {% if offline_with_sort != "" %}{% assign offline_with_sort = offline_with_sort | append: "~~~" %}{% endif %}
       {% assign offline_with_sort = offline_with_sort | append: sortable_entry %}
@@ -140,44 +140,44 @@ endif
     {% assign online_with_sort = online_with_sort | append: sortable_entry %}
   {% endif %}
   {% endfor %}
-  
+
   {% comment %} Sort and extract indices {% endcomment %}
   {% assign online_sorted_entries = online_with_sort | split: "~~~" | sort %}
   {% assign offline_sorted_entries = offline_with_sort | split: "~~~" | sort %}
-  
+
   {% comment %} Rebuild sorted JSON array {% endcomment %}
   {% assign sorted_json = "[" %}
   {% assign device_count = 0 %}
-  
+
   {% for entry in online_sorted_entries %}
   {% unless entry == "" %}
     {% assign entry_parts = entry | split: "|||" %}
     {% assign device_index = entry_parts[1] | plus: 0 %}
     {% assign device = all_devices[device_index] %}
-    
+
     {% if device_count > 0 %}{% assign sorted_json = sorted_json | append: "," %}{% endif %}
     {% capture device_json %}{"ip":"{{ device.ip }}","hostname":"{{ device.hostname }}","mac":"{{ device.mac }}","vendor":"{{ device.vendor }}","type":"{{ device.type }}","ports":"{{ device.ports }}","is_offline":{{ device.is_offline }},"time_diff":{{ device.time_diff }}}{% endcapture %}
     {% assign sorted_json = sorted_json | append: device_json %}
     {% assign device_count = device_count | plus: 1 %}
   {% endunless %}
   {% endfor %}
-  
+
   {% for entry in offline_sorted_entries %}
   {% unless entry == "" %}
     {% assign entry_parts = entry | split: "|||" %}
     {% assign device_index = entry_parts[1] | plus: 0 %}
     {% assign device = all_devices[device_index] %}
-    
+
     {% if device_count > 0 %}{% assign sorted_json = sorted_json | append: "," %}{% endif %}
     {% capture device_json %}{"ip":"{{ device.ip }}","hostname":"{{ device.hostname }}","mac":"{{ device.mac }}","vendor":"{{ device.vendor }}","type":"{{ device.type }}","ports":"{{ device.ports }}","is_offline":{{ device.is_offline }},"time_diff":{{ device.time_diff }}}{% endcapture %}
     {% assign sorted_json = sorted_json | append: device_json %}
     {% assign device_count = device_count | plus: 1 %}
   {% endunless %}
   {% endfor %}
-  
+
   {% assign sorted_json = sorted_json | append: "]" %}
   {% assign sorted_devices = sorted_json | parse_json %}
-  
+
   {% comment %} Count non-empty entries {% endcomment %}
   {% assign online_devices_count = 0 %}
   {% for entry in online_sorted_entries %}
@@ -185,7 +185,7 @@ endif
       {% assign online_devices_count = online_devices_count | plus: 1 %}
     {% endunless %}
   {% endfor %}
-  
+
   {% assign offline_devices_count = 0 %}
   {% for entry in offline_sorted_entries %}
     {% unless entry == "" %}
@@ -193,7 +193,16 @@ endif
     {% endunless %}
   {% endfor %}
   {% if sorted_devices.size > 0 %}
-    <div class="columns" data-overflow-max-cols="{{max_columns}}" data-overflow-counter="true">
+    <div class="columns" data-overflow-max-cols="{{max_columns}}"
+    {% if portrait_columns | default: 0 > 0 %}
+     data-overflow-max-cols-portrait="{{portrait_columns}}"
+    {% endif %}
+        {% if lg_columns | default: 0 > 0 %}
+     data-overflow-max-cols-lg="{{lg_columns}}"
+    {% endif %}
+    {% if lg_portrait_columns | default: 0 > 0 %}
+     data-overflow-max-cols-lg-portrait="{{lg_portrait_columns}}"
+    {% endif %}data-overflow-counter="true">
       <div class="column">
 
         {% comment %} Render sorted device objects {% endcomment %}
