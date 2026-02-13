@@ -17,8 +17,8 @@ CURRENT_VERSION = "v1.2"
 
 # Configuration
 VENDOR_DB_URL = "https://www.wireshark.org/download/automated/data/manuf"
-VENDOR_DB_PATH = "/tmp/device-vendors.txt"
-STATE_FILE = "/tmp/network_scanner_state.json"
+VENDOR_DB_PATH = "/data/device-vendors.txt"
+STATE_FILE = "/data/network_scanner_state.json"
 VERSION_CACHE_FILE = "/tmp/version_cache.json"
 VERSION_CHECK_INTERVAL = 3600  # Check for updates every hour
 BYTE_LIMIT = int(os.getenv("BYTE_LIMIT", "2000"))
@@ -45,14 +45,15 @@ def log(message: str, color: str = Colors.NC):
 
 def download_vendor_db():
     """Download the Wireshark OUI database"""
-    if Path(VENDOR_DB_PATH).exists():
-        # Check if file is older than 7 days
-        mtime = Path(VENDOR_DB_PATH).stat().st_mtime
-        if time.time() - mtime < 7 * 86400:
-            return
-
-    log("Downloading vendor database...", Colors.YELLOW)
     try:
+        # Always check if file exists first
+        if Path(VENDOR_DB_PATH).exists():
+            # Check if file is older than 7 days
+            mtime = Path(VENDOR_DB_PATH).stat().st_mtime
+            if time.time() - mtime < 7 * 86400:
+                return
+
+        log("Downloading vendor database...", Colors.YELLOW)
         response = requests.get(VENDOR_DB_URL, timeout=30)
         response.raise_for_status()
         with open(VENDOR_DB_PATH, 'w') as f:
@@ -60,9 +61,9 @@ def download_vendor_db():
         log("Vendor database downloaded successfully", Colors.GREEN)
     except Exception as e:
         log(f"Failed to download vendor database: {e}", Colors.RED)
-        # Create empty file so script continues
-        Path(VENDOR_DB_PATH).touch()
-
+        # Create empty file if it doesn't exist so script continues
+        if not Path(VENDOR_DB_PATH).exists():
+            Path(VENDOR_DB_PATH).touch()
 
 def get_current_version() -> str:
     """Get current version from local version.json"""
@@ -910,9 +911,9 @@ def main():
     print(f"{Colors.BLUE} Version: {current_version}{Colors.NC}")
     print(f"{Colors.BLUE}========================================{Colors.NC}")
     print()
-
     # Download vendor database
     download_vendor_db()
+    last_vendor_check = time.time()
 
     # Check for updates
     latest_version = get_latest_version()
@@ -937,9 +938,14 @@ def main():
         log("Port scanning DISABLED", Colors.YELLOW)
 
     scan_count = 0
+    weekly_interval = 7 * (24 * 60 * 60)
 
     while True:
         scan_count += 1
+        if time.time() - last_vendor_check > weekly_interval:
+            download_vendor_db()
+            last_vendor_check = time.time()
+
         log(f"--- Scan #{scan_count} ---", Colors.BLUE)
 
         devices = perform_scan()
