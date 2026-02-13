@@ -133,15 +133,15 @@ MIT
 <!-- PLUGIN_STATS_START -->
 ## 🚀 TRMNL Plugin(s)
 
-*Last updated: 2026-02-12 06:44:56 UTC*
+*Last updated: 2026-02-13 01:30:36 UTC*
 
 
-## <img src="assets/plugin-images/189338_icon.png" alt="Network Devices v1.1 icon" width="32"/> [Network Devices v1.1](https://trmnl.com/recipes/189338)
+## <img src="assets/plugin-images/189338_icon.png" alt="Network Devices v1.2 icon" width="32"/> [Network Devices v1.2](https://trmnl.com/recipes/189338)
 
-![Network Devices v1.1 screenshot](assets/plugin-images/189338_screenshot.png)
+![Network Devices v1.2 screenshot](assets/plugin-images/189338_screenshot.png)
 
 ### Description
-Keep tabs on every device connected to your home or office network with automatic discovery, smart categorization, and real-time status tracking. Network Devices scans your local network, identifies devices by vendor and type, and displays them with intuitive icons on your TRMNL.<br /><br />Features:<br />• Automatic device detection via arp-scan and nmap<br />• Smart vendor identification from MAC addresses<br />• Offline tracking - see when devices disconnect<br />• Port scanning with customizable labels<br />• Customizable names, icons, and device types<br />• Clean, modern interface with Material Symbols icons<br /><br />Requires a Docker container running on your network (5 min setup). Perfect for monitoring IoT devices, tracking network usage, or keeping an eye on who's connected.<br /><br /><strong>Changelog:</strong><br />• <strong>v1.1:</strong> <strong>Added port scanning.</strong><br />Update your network-scanner and enable the .env properties (see the updated .env.axample )<br />
+Keep tabs on every device connected to your home or office network with automatic discovery, smart categorization, and real-time status tracking. Network Devices scans your local network, identifies devices by vendor and type, and displays them with intuitive icons on your TRMNL.<br /><br />Features:<br />• Automatic device detection via arp-scan and nmap<br />• Smart vendor identification from MAC addresses<br />• Offline tracking - see when devices disconnect<br />• Port scanning with customizable labels<br />• Customizable names, icons, and device types<br />• Clean, modern interface with Material Symbols icons<br /><br />Requires a Docker container running on your network (5 min setup). Perfect for monitoring IoT devices, tracking network usage, or keeping an eye on who's connected.<br /><br /><strong>Changelog:</strong><br />• <strong>v1.2:</strong> <strong>Added the device running the network-scanner in the report.</strong><br />• <strong>v1.1:</strong> <strong>Added port scanning.</strong><br />Update your network-scanner and enable the .env properties (see the updated .env.axample )<br />
 
 ### 📊 Statistics
 
