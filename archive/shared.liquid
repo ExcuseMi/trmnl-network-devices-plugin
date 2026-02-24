@@ -194,15 +194,16 @@ endif
   {% endfor %}
   {% if sorted_devices.size > 0 %}
     <div class="columns" data-overflow-max-cols="{{max_columns}}"
-    {% if portrait_columns | default: 0 > 0 %}
-     data-overflow-max-cols-portrait="{{portrait_columns}}"
-    {% endif %}
-        {% if lg_columns | default: 0 > 0 %}
+    {% if lg_columns | default: 0 > 0 %}
      data-overflow-max-cols-lg="{{lg_columns}}"
     {% endif %}
     {% if lg_portrait_columns | default: 0 > 0 %}
      data-overflow-max-cols-lg-portrait="{{lg_portrait_columns}}"
-    {% endif %}data-overflow-counter="true">
+    {% endif %} 
+    {% if portrait_columns | default: 0 > 0 %}
+     data-overflow-max-cols-portrait="{{portrait_columns}}"
+    {% endif %}
+      data-overflow-counter="true">
       <div class="column">
 
         {% comment %} Render sorted device objects {% endcomment %}
