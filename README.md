@@ -133,7 +133,7 @@ MIT
 <!-- PLUGIN_STATS_START -->
 ## 🚀 TRMNL Plugin(s)
 
-*Last updated: 2026-02-24 06:42:37 UTC*
+*Last updated: 2026-02-25 06:45:50 UTC*
 
 
 ## <img src="assets/plugin-images/189338_icon.png" alt="Network Devices v1.2 icon" width="32"/> [Network Devices v1.2](https://trmnl.com/recipes/189338)
@@ -148,7 +148,7 @@ Keep tabs on every device connected to your home or office network with automati
 | Metric | Value |
 |--------|-------|
 | Installs | 1 |
-| Forks | 41 |
+| Forks | 40 |
 
 ---
 
