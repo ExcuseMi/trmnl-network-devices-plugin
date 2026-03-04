@@ -63,6 +63,7 @@ PORT_SCAN_PORTS=22,80,443,8080,3389,5900,9000
 
 ```bash
 cd trmnl-network-devices-plugin
+git pull
 docker compose pull
 docker compose up -d
 ```
