@@ -64,7 +64,8 @@ def generate_settings():
             'field_type': 'author_bio',
             'description': f"""Keep tabs on every device connected to your home or office network with automatic discovery, smart categorization, and real-time status tracking. Network Devices scans your local network, identifies devices by vendor and type, and displays them with intuitive icons on your TRMNL.<br /><br />Features:<br />• Automatic device detection via arp-scan and nmap<br />• Smart vendor identification from MAC addresses<br />• Offline tracking - see when devices disconnect<br />• Port scanning with customizable labels<br />• Customizable names, icons, and device types<br />• Clean, modern interface with Material Symbols icons<br /><br />Requires a Docker container running on your network (5 min setup). Perfect for monitoring IoT devices, tracking network usage, or keeping an eye on who's connected.<br /><br />{changelog_html}""",
             'github_url': 'https://github.com/ExcuseMi/trmnl-network-devices-plugin',
-            'category': 'analytics'
+            'category': 'analytics',
+            'help_text': 'TRMNL X Ready'
         },
         {
             'keyname': 'device_identifiers',
