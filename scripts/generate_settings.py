@@ -148,26 +148,20 @@ def generate_settings():
 
 def main():
     project_root = get_project_root()
-    settings = generate_settings()
+    custom_fields = generate_settings()
 
-    # Ensure data directory exists
-    data_dir = project_root / 'data'
-    data_dir.mkdir(exist_ok=True)
+    settings_file = project_root / 'plugin' / 'src' / 'settings.yml'
 
-    # Output to data/settings.yml
-    output_file = data_dir / 'options.yml'
-    with open(output_file, 'w') as f:
+    with open(settings_file, 'r') as f:
+        settings = yaml.safe_load(f)
+
+    settings['custom_fields'] = custom_fields
+
+    with open(settings_file, 'w') as f:
         yaml.dump(settings, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
-    print(f"✓ Generated {output_file}")
-    print(f"  Project root: {project_root}")
-    print(f"  Contains {len(settings)} settings")
-
-    # Also output to stdout for inspection
-    print("\n" + "=" * 60)
-    print("Generated Settings:")
-    print("=" * 60)
-    print(yaml.dump(settings, default_flow_style=False, allow_unicode=True, sort_keys=False))
+    print(f"✓ Updated {settings_file}")
+    print(f"  custom_fields contains {len(custom_fields)} entries")
 
 
 if __name__ == '__main__':

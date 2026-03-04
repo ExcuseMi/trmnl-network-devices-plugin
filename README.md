@@ -17,10 +17,12 @@ git clone https://github.com/ExcuseMi/trmnl-network-devices-plugin.git
 cd trmnl-network-devices-plugin
 cp .env.example .env
 nano .env  # Add your PLUGIN_UUID
-docker-compose up -d
+docker compose up -d
 ```
 
-That's it. The scanner will auto-detect your network and start sending data to TRMNL.
+That's it. The scanner pulls the pre-built image from the GitHub Container Registry and auto-detects your network.
+
+> The image is built for **linux/amd64** and **linux/arm64** (Raspberry Pi).
 
 ### Scanner Settings (.env file)
 
@@ -61,13 +63,19 @@ PORT_SCAN_PORTS=22,80,443,8080,3389,5900,9000
 
 ```bash
 cd trmnl-network-devices-plugin
-git pull
-docker-compose down
-docker-compose build --no-cache
-docker-compose up -d
+docker compose pull
+docker compose up -d
 ```
 
-After updating, review .env.example and compare it with your existing .env file. Add or adjust any new configuration options as needed.
+After updating, review `.env.example` and compare it with your existing `.env` file. Add or adjust any new configuration options as needed.
+
+## Development
+
+To build and run the image locally instead of pulling from the registry:
+
+```bash
+docker compose -f docker-compose.dev.yml up -d
+```
 
 ## How It Works
 

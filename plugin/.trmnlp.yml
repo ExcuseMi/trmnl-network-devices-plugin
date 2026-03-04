@@ -1,0 +1,50 @@
+# TRMNLP configuration
+# {{ env.VARIABLE }} interpolation is available here
+---
+# auto-reload when files change (`watch: false` to disable)
+watch:
+  - .trmnlp.yml
+  - src
+
+# values of custom fields (defined in src/settings.yml)
+custom_fields: {}
+
+# override variables
+variables:
+  trmnl:
+    system:
+      timestamp_utc: 1700000000
+    plugin_settings:
+      instance_name: "Network Devices v1.3"
+      strategy: webhook
+      dark_mode: "no"
+      no_screen_padding: "no"
+      polling_headers: ""
+      polling_url: ""
+      custom_fields_values:
+        show_ports: "yes"
+        port_labels: ""
+        port_display_mode: both
+        device_identifiers: ""
+        show_mac_addresses: "no"
+        show_offline_devices: "yes"
+  devices_list:
+    - "192.168.1.1|router.local|AA:BB:CC:DD:EE:01|TP-Link|Router|1700000000|80,443,9000"
+    - "192.168.1.3|living-room-light|AA:BB:CC:DD:EE:02|Philips|Smart Device|1700000000|"
+    - "192.168.1.10|home-server|AA:BB:CC:DD:EE:03||Raspberry Pi|1700000000|22,80,443"
+    - "192.168.1.16|guest-laptop|AA:BB:CC:DD:EE:04|||1700000000|"
+    - "192.168.1.17|work-laptop|AA:BB:CC:DD:EE:05|||1700000000|22"
+    - "192.168.1.18|kitchen-speaker|AA:BB:CC:DD:EE:06|Sonos|Speaker|1700000000|"
+    - "192.168.1.21|bedroom-plug|AA:BB:CC:DD:EE:07|Tuya|Smart Device|1700000000|"
+    - "192.168.1.22|office-speaker|AA:BB:CC:DD:EE:08||Speaker|1700000000|"
+    - "192.168.1.24|tv-streamer|AA:BB:CC:DD:EE:09||TV/Streaming|1700000000|"
+    - "192.168.1.41|office-printer|AA:BB:CC:DD:EE:10|Brother|Printer|1700000000|631"
+    - "192.168.1.45|iot-hub|AA:BB:CC:DD:EE:11|||1700000000|"
+    - "192.168.1.62|garage-camera|AA:BB:CC:DD:EE:12||Camera|1700000000|"
+    - "192.168.1.23|johns-iphone|AA:BB:CC:DD:EE:13||Mobile Device|1700000000|"
+    - "192.168.1.34|sams-tablet|AA:BB:CC:DD:EE:14||Mobile Device|1699999200|"
+    - "192.168.1.52|nas-server|AA:BB:CC:DD:EE:15||NAS|1699999200|22,80,443"
+    - "192.168.1.64|mesh-node|AA:BB:CC:DD:EE:16||Router|1699999200|"
+    - "192.168.1.27|field-tablet|AA:BB:CC:DD:EE:17||Mobile Device|1699999200|"
+    - "192.168.1.26|esp-sensor-01|AA:BB:CC:DD:EE:18||IoT Sensor|1699000000|"
+  v: "v1.3|v1.3|1700000000"
