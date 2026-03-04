@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 
-import os
-import sys
 import json
-import time
-import subprocess
+import os
 import re
 import socket
-import requests
-from datetime import datetime, timedelta, UTC
+import subprocess
+import sys
+import time
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
+
+import requests
 
 # Version
-CURRENT_VERSION = "v1.2"
+CURRENT_VERSION = "v1.3"
 
 # Configuration
 VENDOR_DB_URL = "https://www.wireshark.org/download/automated/data/manuf"
@@ -670,6 +671,21 @@ def perform_scan() -> List[Dict]:
             'type': device_type,
             'ports': open_ports  # Store open ports
         })
+
+    # Deduplicate by IP: some devices (e.g. WiFi extenders) have multiple MACs
+    # (one per interface) and respond to ARP from each. Sort by MAC and keep the lowest
+    # so the result is deterministic regardless of ARP reply order.
+    devices.sort(key=lambda d: d['mac'])
+    seen_ips: set = set()
+    deduped = []
+    for device in devices:
+        ip = device['ip']
+        if ip not in seen_ips:
+            seen_ips.add(ip)
+            deduped.append(device)
+        else:
+            log(f"Deduped {ip}: dropping {device['mac']}", Colors.YELLOW)
+    devices = deduped
 
     # Sort by IP
     devices.sort(key=lambda d: [int(x) for x in d['ip'].split('.')])

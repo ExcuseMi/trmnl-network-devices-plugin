@@ -2,6 +2,10 @@
   "repo": "ExcuseMi/trmnl-network-devices-plugin",
   "branch": "main",
   "versions": [
+    {
+      "version": "v1.3",
+      "changelog": "<strong>fixes #3: Deduplicate devices with same IP by keeping lowest MAC.</strong>"
+    },
         {
       "version": "v1.2",
       "changelog": "<strong>Added the device running the network-scanner in the report.</strong>"
