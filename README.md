@@ -108,16 +108,16 @@ Once devices are found, the scanner:
 - **Cause:** Some devices intentionally hide from network scans (stealth mode), or firewalls block ICMP/ARP
 - **Check:** Try scanning manually:
   ```bash
-  docker exec network-scanner arp-scan --interface=eth0 --localnet
-  docker exec network-scanner nmap -sn 192.168.1.0/24
+  docker exec trmnl-network-devices-scanner arp-scan --interface=eth0 --localnet
+  docker exec trmnl-network-devices-scanner nmap -sn 192.168.1.0/24
   ```
 - **Sadly,  These devices can't be auto-discovered **
 #### 4. Scanner container networking issues
 - **Cause:** Container must run in `host` network mode to see local devices, and needs `privileged: true` for raw socket access
 - **Check:** Verify docker-compose.yml has both settings:
   ```bash
-  docker inspect network-scanner | grep -A5 NetworkMode
-  docker inspect network-scanner | grep Privileged
+  docker inspect trmnl-network-devices-scanner | grep -A5 NetworkMode
+  docker inspect trmnl-network-devices-scanner | grep Privileged
   ```
 - **Solution:** Ensure your docker-compose.yml contains:
   ```yaml
@@ -141,22 +141,17 @@ MIT
 <!-- PLUGIN_STATS_START -->
 ## 🚀 TRMNL Plugin(s)
 
-*Last updated: 2026-03-04 06:30:45 UTC*
+*Last updated: 2026-03-04 10:02:48 UTC*
 
 
-## <img src="assets/plugin-images/189338_icon.png" alt="Network Devices v1.2 icon" width="32"/> [Network Devices v1.2](https://trmnl.com/recipes/189338)
+## <img src="assets/plugin-images/189338_icon.png" alt="Network Devices v1.3 icon" width="32"/> [Network Devices v1.3](https://usetrmnl.com/recipes/189338)
 
-![Network Devices v1.2 screenshot](assets/plugin-images/189338_screenshot.png)
+![Installs](https://trmnl-badges.gohk.xyz/badge/installs?recipe=189338) ![Forks](https://trmnl-badges.gohk.xyz/badge/forks?recipe=189338)
+
+![Network Devices v1.3 screenshot](assets/plugin-images/189338_screenshot.png)
 
 ### Description
-Keep tabs on every device connected to your home or office network with automatic discovery, smart categorization, and real-time status tracking. Network Devices scans your local network, identifies devices by vendor and type, and displays them with intuitive icons on your TRMNL.<br /><br />Features:<br />• Automatic device detection via arp-scan and nmap<br />• Smart vendor identification from MAC addresses<br />• Offline tracking - see when devices disconnect<br />• Port scanning with customizable labels<br />• Customizable names, icons, and device types<br />• Clean, modern interface with Material Symbols icons<br /><br />Requires a Docker container running on your network (5 min setup). Perfect for monitoring IoT devices, tracking network usage, or keeping an eye on who's connected.<br /><br /><strong>Changelog:</strong><br />• <strong>v1.2:</strong> <strong>Added the device running the network-scanner in the report.</strong><br />• <strong>v1.1:</strong> <strong>Added port scanning.</strong><br />Update your network-scanner and enable the .env properties (see the updated .env.axample )<br />
-
-### 📊 Statistics
-
-| Metric | Value |
-|--------|-------|
-| Installs | 1 |
-| Forks | 43 |
+Keep tabs on every device connected to your home or office network with automatic discovery, smart categorization, and real-time status tracking. Network Devices scans your local network, identifies devices by vendor and type, and displays them with intuitive icons on your TRMNL.<br /><br />Features:<br />• Automatic device detection via arp-scan and nmap<br />• Smart vendor identification from MAC addresses<br />• Offline tracking - see when devices disconnect<br />• Port scanning with customizable labels<br />• Customizable names, icons, and device types<br />• Clean, modern interface with Material Symbols icons<br /><br />Requires a Docker container running on your network (5 min setup). Perfect for monitoring IoT devices, tracking network usage, or keeping an eye on who's connected.<br /><br /><strong>Changelog:</strong><br />• <strong>v1.3:</strong> <strong>fixes #3: Deduplicate devices with same IP by keeping lowest MAC.</strong><br />• <strong>v1.2:</strong> <strong>Added the device running the network-scanner in the report.</strong><br />• <strong>v1.1:</strong> <strong>Added port scanning.</strong><br />Update your network-scanner and enable the .env properties (see the updated .env.axample )<br />
 
 ---
 

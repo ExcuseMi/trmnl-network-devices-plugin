@@ -1,7 +1,7 @@
 services:
-  network-scanner:
+  trmnl-network-devices-scanner:
     image: ghcr.io/excusemi/trmnl-network-devices-scanner:latest
-    container_name: network-scanner
+    container_name: trmnl-network-devices-scanner
 
     network_mode: host
     pid: host

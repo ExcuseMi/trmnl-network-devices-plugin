@@ -1,23 +1,45 @@
 #!/usr/bin/env python3
-import hashlib
-import os
-import re
-from datetime import datetime, timezone
-from urllib.parse import urlparse
-
 import requests
+import re
+import os
+import hashlib
+from datetime import datetime, timezone
+from pathlib import Path
+from urllib.parse import urlparse
 
 
 def load_plugin_config():
-    """Load plugin IDs from plugins.env file"""
+    """Load plugin IDs from plugins.env file in ../script directory"""
     config = {
         'plugin_ids': [],
         'section_title': '🚀 Plugin Statistics',
         'images_dir': 'assets/plugin-images'
     }
 
+    # Try multiple possible locations for plugins.env
+    possible_paths = [
+        '../script/plugins.env',  # From scripts/ directory looking into script/
+        'plugins.env',            # Current directory
+        './plugins.env',          # Current directory explicitly
+        '../plugins.env',         # Parent directory
+    ]
+
+    env_file_path = None
+    for path in possible_paths:
+        if os.path.exists(path):
+            env_file_path = path
+            print(f"📁 Found plugins.env at: {path}")
+            break
+
+    if not env_file_path:
+        print("⚠️  plugins.env file not found in any of the expected locations:")
+        for path in possible_paths:
+            print(f"   - {path}")
+        print("Using default configuration.")
+        return config
+
     try:
-        with open('plugins.env', 'r') as f:
+        with open(env_file_path, 'r') as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith('#'):
@@ -32,8 +54,9 @@ def load_plugin_config():
                             config['section_title'] = value
                         elif key == 'IMAGES_DIR':
                             config['images_dir'] = value
-    except FileNotFoundError:
-        print("⚠️  plugins.env file not found. Using default configuration.")
+    except Exception as e:
+        print(f"⚠️  Error reading plugins.env from {env_file_path}: {e}")
+        print("Using default configuration.")
 
     return config
 
@@ -92,7 +115,7 @@ def get_image_extension(url: str):
 
 def fetch_plugin_data(plugin_id: str, max_retries=3):
     """Fetch plugin data from TRMNL API with retry logic"""
-    url = f"https://trmnl.com/recipes/{plugin_id}.json"
+    url = f"https://usetrmnl.com/recipes/{plugin_id}.json"
 
     for attempt in range(max_retries):
         try:
@@ -167,7 +190,7 @@ def generate_plugin_section(data, plugin_id: str, image_paths: dict):
 
 This plugin is configured but either hasn't been published to the TRMNL marketplace yet or the API is temporarily unavailable.
 
-**Plugin URL**: https://trmnl.com/recipes/{plugin_id}
+**Plugin URL**: https://usetrmnl.com/recipes/{plugin_id}
 
 ---
 """
@@ -183,13 +206,11 @@ This plugin is configured but either hasn't been published to the TRMNL marketpl
 
 The plugin exists but data is not available yet. This usually means it's very new or still being processed.
 
-**Plugin URL**: https://trmnl.com/recipes/{plugin_id}
+**Plugin URL**: https://usetrmnl.com/recipes/{plugin_id}
 
 ---
 """
         return markdown
-
-    stats = plugin.get('stats', {})
 
     # Use local image paths or fallback to original URLs
     icon_path = image_paths.get('icon') if image_paths else plugin.get('icon_url', '')
@@ -197,23 +218,16 @@ The plugin exists but data is not available yet. This usually means it's very ne
 
     name = plugin.get('name', 'Unknown Plugin')
     description = plugin.get('author_bio', {}).get('description', 'No description available')
-    installs = stats.get('installs', 0)
-    forks = stats.get('forks', 0)
 
     markdown = f"""
-## <img src="{icon_path}" alt="{name} icon" width="32"/> [{name}](https://trmnl.com/recipes/{plugin_id})
+## <img src="{icon_path}" alt="{name} icon" width="32"/> [{name}](https://usetrmnl.com/recipes/{plugin_id})
+
+![Installs](https://trmnl-badges.gohk.xyz/badge/installs?recipe={plugin_id}) ![Forks](https://trmnl-badges.gohk.xyz/badge/forks?recipe={plugin_id})
 
 ![{name} screenshot]({screenshot_path})
 
 ### Description
 {description}
-
-### 📊 Statistics
-
-| Metric | Value |
-|--------|-------|
-| Installs | {installs:,} |
-| Forks | {forks:,} |
 
 ---
 """
