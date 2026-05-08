@@ -142,14 +142,14 @@ MIT
 <!-- PLUGIN_STATS_START -->
 ## 🚀 TRMNL Plugin(s)
 
-*Last updated: 2026-05-07 08:07:41 UTC*
+*Last updated: 2026-05-08 07:10:58 UTC*
 
 
 ## <img src="assets/plugin-images/189338_icon.png" alt="Network Devices v1.3 icon" width="32"/> [Network Devices v1.3](https://usetrmnl.com/recipes/189338)
 
 ![Installs](https://trmnl-badges.gohk.xyz/badge/installs?recipe=189338) ![Forks](https://trmnl-badges.gohk.xyz/badge/forks?recipe=189338)
 
-![Network Devices v1.3 screenshot](assets/plugin-images/189338_screenshot.bmp)
+![Network Devices v1.3 screenshot](assets/plugin-images/189338_screenshot.png)
 
 ### Description
 Keep tabs on every device connected to your home or office network with automatic discovery, smart categorization, and real-time status tracking. Network Devices scans your local network, identifies devices by vendor and type, and displays them with intuitive icons on your TRMNL.<br /><br />Features:<br />• Automatic device detection via arp-scan and nmap<br />• Smart vendor identification from MAC addresses<br />• Offline tracking - see when devices disconnect<br />• Port scanning with customizable labels<br />• Customizable names, icons, and device types<br />• Clean, modern interface with Material Symbols icons<br /><br />Requires a Docker container running on your network (5 min setup). Perfect for monitoring IoT devices, tracking network usage, or keeping an eye on who's connected.<br /><br /><strong>Changelog:</strong><br />• <strong>v1.3:</strong> <strong>fixes #3: Deduplicate devices with same IP by keeping lowest MAC.</strong><br />• <strong>v1.2:</strong> <strong>Added the device running the network-scanner in the report.</strong><br />• <strong>v1.1:</strong> <strong>Added port scanning.</strong><br />Update your network-scanner and enable the .env properties (see the updated .env.axample )<br />
